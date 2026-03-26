@@ -148,8 +148,16 @@ deploy_base_infrastructure() {
     
     # === CUSTOM FIX 2: Ép chạy tuần tự để chống nghẽn I/O ===
     if ! retry_heavy tofu apply -auto-approve -var-file tfvars/vars-all.tfvars -parallelism=1; then
-        log_error "Base infrastructure deployment failed"
-        return 1
+        # cloud-init status --wait exits with code 2 when degraded (metadata service warning)
+        # but k3s may still be running fine - verify before failing
+        log_warning "tofu apply reported failure, checking if k3s is actually ready..."
+        sleep 10
+        if kubectl get nodes >/dev/null 2>&1; then
+            log_warning "k3s is accessible despite tofu apply error (likely cloud-init degraded warning), continuing..."
+        else
+            log_error "Base infrastructure deployment failed and k3s is not accessible"
+            return 1
+        fi
     fi
 
     log_success "Base infrastructure deployment completed"

@@ -315,6 +315,20 @@ deploy_head_services() {
         helm list --all-namespaces -q | xargs -I{} helm uninstall {} --wait 2>/dev/null || true
     fi
 
+    # Cleanup failed Helm release secrets to prevent "cannot re-use a name" error on retry
+    log "Cleaning up failed Helm release secrets..."
+    for ns in prometheus crczp cert-manager cnpg-system reloader kube-system; do
+        kubectl get secrets -n "$ns" -l owner=helm -o json 2>/dev/null | \
+            python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for item in data.get('items', []):
+    labels = item.get('metadata', {}).get('labels', {})
+    if labels.get('status') == 'failed':
+        print(item['metadata']['name'])
+" | xargs -r kubectl delete secret -n "$ns" 2>/dev/null || true
+    done
+
     # Wait for postgres cluster to be healthy before deploying head chart
     wait_for_service "postgres cluster" \
         "kubectl get pods -n cnpg-system -l cnpg.io/cluster=postgres --field-selector=status.phase=Running 2>/dev/null | grep -q Running" \

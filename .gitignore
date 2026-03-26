@@ -1,0 +1,24 @@
+# Vagrant
+.vagrant/
+
+# Terraform state files
+*.tfstate
+*.tfstate.backup
+*.tfstate.*.backup
+
+# Terraform working directory
+.terraform/
+
+# Log files
+*.log
+
+# Secrets / credentials
+*secrets.tfvars
+.env
+auth.json
+gcp.key
+
+# VM / image files
+*.qcow2
+*.img
+*.iso

@@ -2,24 +2,24 @@
 
 # Common utility functions for OpenStack deployment
 
-# Logging function with timestamp
+# Logging function with timestamp (UTC+7)
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "[$(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
 # Error logging
 log_error() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
+    echo "[$(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
 }
 
 # Warning logging
 log_warning() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $1" >&2
+    echo "[$(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S')] WARNING: $1" >&2
 }
 
 # Success logging
 log_success() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $1"
+    echo "[$(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $1"
 }
 
 # Retry function for unreliable operations

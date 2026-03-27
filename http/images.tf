@@ -1,6 +1,6 @@
 resource "openstack_images_image_v2" "noble" {
   name             = "ubuntu-noble-x86_64"
-  image_source_url = "http://100.70.135.32:8080/ubuntu-noble-x86_64.qcow2"
+  image_source_url = "http://100.70.135.32:8080/noble-server-cloudimg-amd64.img"
   container_format = "bare"
   disk_format      = "qcow2"
 
@@ -11,7 +11,7 @@ resource "openstack_images_image_v2" "noble" {
 
 resource "openstack_images_image_v2" "debian_12" {
   name             = "debian-12-x86_64"
-  image_source_url = "http://100.70.135.32:8080/debian-12-generic-amd64.qcow2"
+  image_source_url = "http://100.70.135.32:8080/debian-12-genericcloud-amd64.qcow2"
   container_format = "bare"
   disk_format      = "qcow2"
 
@@ -29,7 +29,7 @@ resource "openstack_images_image_v2" "kali" {
 
   properties = {
     os_type                                = "linux"
-    "owner_specified.openstack.gui_access" = "true"
+    "owner_specified.openstack.gui_access" = true
   }
 }
 
@@ -42,6 +42,6 @@ resource "openstack_images_image_v2" "noble_man" {
 
   properties = {
     os_type                                = "linux"
-    "owner_specified.openstack.gui_access" = "true"
+    "owner_specified.openstack.gui_access" = true
   }
 }

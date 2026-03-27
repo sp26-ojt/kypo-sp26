@@ -20,6 +20,17 @@ BASE_TF_PATH="$REPO_PATH/tf-openstack-base"
 HEAD_TF_PATH="$REPO_PATH/tf-head-services"
 VENV_PATH="/root/kolla-ansible-venv"
 
+# === CUSTOM: Docker images của bạn ===
+CUSTOM_FRONTEND_IMAGE="sp26ojt/frontend-platform"
+CUSTOM_FRONTEND_TAG="v6"
+
+CUSTOM_TRAINING_IMAGE="nnm311/kypo-training-service"
+CUSTOM_TRAINING_TAG="v26"
+
+CUSTOM_ADAPTIVE_TRAINING_IMAGE="nnm311/kypo-adaptive-training-service"
+CUSTOM_ADAPTIVE_TRAINING_TAG="v1"
+# ======================================
+
 # Setup application credentials
 setup_application_credentials() {
     log "Setting up OpenStack application credentials..."
@@ -145,23 +156,16 @@ deploy_base_infrastructure() {
 
     # Apply Terraform configuration
     log "Applying base infrastructure (this may take 15-30 minutes)..."
-    
+
     # === CUSTOM FIX 2: Ép chạy tuần tự để chống nghẽn I/O ===
-    if ! retry_heavy tofu apply -auto-approve -var-file tfvars/vars-all.tfvars -parallelism=1; then
-        # cloud-init status --wait exits with code 2 when degraded (metadata service warning)
-        # but k3s may still be running fine - verify before failing
-        log_warning "tofu apply reported failure, checking if k3s is actually ready..."
-        sleep 10
-        if kubectl get nodes >/dev/null 2>&1; then
-            log_warning "k3s is accessible despite tofu apply error (likely cloud-init degraded warning), continuing..."
-        else
-            log_error "Base infrastructure deployment failed and k3s is not accessible"
-            return 1
-        fi
+    if ! retry tofu apply -auto-approve -var-file tfvars/vars-all.tfvars -parallelism=1; then
+        log_error "Base infrastructure deployment failed"
+        return 1
     fi
 
     log_success "Base infrastructure deployment completed"
 }
+
 # Setup Kubernetes configuration
 setup_kubernetes_config() {
     log "Setting up Kubernetes configuration..."
@@ -259,7 +263,7 @@ setup_head_services_variables() {
     export TF_VAR_proxy_key="$proxy_key"
 
     # Configure users
-    export TF_VAR_users="{\"crczp-admin\"={iss=\"http://keycloak-service:8080/keycloak/realms/CRCZP\",keycloakUsername=\"crczp-admin\",keycloakPassword=\"password\",email=\"crczp-admin@example.com\",fullName=\"Demo Admin\",givenName=\"Demo\",familyName=\"Admin\",admin=true}}"
+    export TF_VAR_users="{\"crczp-admin\"={iss=\"https://$head_host/keycloak/realms/CRCZP\",keycloakUsername=\"crczp-admin\",keycloakPassword=\"password\",email=\"crczp-admin@example.com\",fullName=\"Demo Admin\",givenName=\"Demo\",familyName=\"Admin\",admin=true}}"
 
     log "Head services variables configured for host: $head_host"
     log_success "Head services variables setup completed"
@@ -308,39 +312,45 @@ deploy_head_services() {
         log_warning "values.yaml not found, continuing without DNS updates"
     fi
 
-    # Cleanup existing Helm releases to ensure idempotent deploy
-    existing_releases=$(helm list --all-namespaces --short 2>/dev/null || true)
-    if [ -n "$existing_releases" ]; then
-        log "Cleaning up existing Helm releases..."
-        helm list --all-namespaces -q | xargs -I{} helm uninstall {} --wait 2>/dev/null || true
+    # === CUSTOM FIX: Override frontend, training, adaptive-training images ===
+    if [ -f values.yaml ]; then
+        if ! grep -q "CUSTOM_IMAGE_OVERRIDE" values.yaml; then
+            log "Appending custom image overrides to values.yaml..."
+            cat >> values.yaml << EOF
+
+# CUSTOM_IMAGE_OVERRIDE
+frontend:
+  image:
+    url: ${CUSTOM_FRONTEND_IMAGE}
+    tag: ${CUSTOM_FRONTEND_TAG}
+
+training:
+  image:
+    url: ${CUSTOM_TRAINING_IMAGE}
+    tag: ${CUSTOM_TRAINING_TAG}
+
+adaptive-training:
+  image:
+    url: ${CUSTOM_ADAPTIVE_TRAINING_IMAGE}
+    tag: ${CUSTOM_ADAPTIVE_TRAINING_TAG}
+EOF
+            log "Image overrides applied:"
+            log "  - frontend: ${CUSTOM_FRONTEND_IMAGE}:${CUSTOM_FRONTEND_TAG}"
+            log "  - training: ${CUSTOM_TRAINING_IMAGE}:${CUSTOM_TRAINING_TAG}"
+            log "  - adaptive-training: ${CUSTOM_ADAPTIVE_TRAINING_IMAGE}:${CUSTOM_ADAPTIVE_TRAINING_TAG}"
+        else
+            log "Custom image overrides already applied in values.yaml"
+        fi
     fi
-
-    # Cleanup failed Helm release secrets to prevent "cannot re-use a name" error on retry
-    log "Cleaning up failed Helm release secrets..."
-    for ns in prometheus crczp cert-manager cnpg-system reloader kube-system; do
-        kubectl get secrets -n "$ns" -l owner=helm -o json 2>/dev/null | \
-            python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-for item in data.get('items', []):
-    labels = item.get('metadata', {}).get('labels', {})
-    if labels.get('status') == 'failed':
-        print(item['metadata']['name'])
-" | xargs -r kubectl delete secret -n "$ns" 2>/dev/null || true
-    done
-
-    # Wait for postgres cluster to be healthy before deploying head chart
-    wait_for_service "postgres cluster" \
-        "kubectl get pods -n cnpg-system -l cnpg.io/cluster=postgres --field-selector=status.phase=Running 2>/dev/null | grep -q Running" \
-        60 10
+    # =========================================================================
 
     # Check if Terraform is already initialized
     if [ ! -d ".terraform" ]; then
         log "Initializing head services Terraform..."
-        retry_heavy tofu init
+        retry tofu init
     else
         log "Terraform already initialized, checking for updates..."
-        retry_heavy tofu init -upgrade
+        retry tofu init -upgrade
     fi
 
     # Check current state before applying
@@ -364,25 +374,9 @@ for item in data.get('items', []):
 
     # Apply head services configuration
     log "Applying head services configuration (this may take 20-40 minutes)..."
-    if ! retry_heavy tofu apply -auto-approve; then
-        log_warning "tofu apply failed, cleaning up failed Helm secrets and retrying once..."
-        # Cleanup any failed Helm release secrets before retry
-        for ns in prometheus crczp cert-manager cnpg-system reloader kube-system; do
-            kubectl get secrets -n "$ns" -l owner=helm -o json 2>/dev/null | \
-                python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-for item in data.get('items', []):
-    labels = item.get('metadata', {}).get('labels', {})
-    if labels.get('status') == 'failed':
-        print(item['metadata']['name'])
-" | xargs -r kubectl delete secret -n "$ns" 2>/dev/null || true
-        done
-        # One more retry after cleanup
-        if ! retry_heavy tofu apply -auto-approve; then
-            log_error "Head services deployment failed"
-            return 1
-        fi
+    if ! retry tofu apply -auto-approve; then
+        log_error "Head services deployment failed"
+        return 1
     fi
 
     log_success "Head services deployment completed"

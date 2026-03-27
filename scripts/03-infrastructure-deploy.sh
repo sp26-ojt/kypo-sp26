@@ -109,19 +109,18 @@ deploy_base_infrastructure() {
         retry tofu init -upgrade
     fi
 
-    # === CUSTOM FIX: Chỉ Curl file images.tf đã fix cứng IP về ===
-    log "Downloading custom images.tf..."
+    # === CUSTOM FIX: Override images.tf để dùng local_file_path thay vì HTTP server ===
+    log "Overriding images.tf with local file path version..."
     IMAGES_TF_PATH=".terraform/modules/images/images.tf"
-    CUSTOM_FILE_URL="http://192.168.121.1:8080/images.tf" # <-- Điền link của bạn vào đây
+    CUSTOM_IMAGES_TF="/vagrant/http/images.tf"
 
     if [ -d ".terraform/modules/images" ]; then
-        rm -f "$IMAGES_TF_PATH"
-        curl -sSL "$CUSTOM_FILE_URL" -o "$IMAGES_TF_PATH"
-        log "Successfully replaced images.tf"
+        cp "$CUSTOM_IMAGES_TF" "$IMAGES_TF_PATH"
+        log "Successfully replaced images.tf (using local_file_path)"
     else
         log_warning "Directory .terraform/modules/images not found. Custom fix skipped."
     fi
-    # ==============================================================
+    # ==================================================================================
 
     # Set Terraform variables
     export TF_VAR_external_network_name=public1

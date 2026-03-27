@@ -365,8 +365,24 @@ for item in data.get('items', []):
     # Apply head services configuration
     log "Applying head services configuration (this may take 20-40 minutes)..."
     if ! retry_heavy tofu apply -auto-approve; then
-        log_error "Head services deployment failed"
-        return 1
+        log_warning "tofu apply failed, cleaning up failed Helm secrets and retrying once..."
+        # Cleanup any failed Helm release secrets before retry
+        for ns in prometheus crczp cert-manager cnpg-system reloader kube-system; do
+            kubectl get secrets -n "$ns" -l owner=helm -o json 2>/dev/null | \
+                python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for item in data.get('items', []):
+    labels = item.get('metadata', {}).get('labels', {})
+    if labels.get('status') == 'failed':
+        print(item['metadata']['name'])
+" | xargs -r kubectl delete secret -n "$ns" 2>/dev/null || true
+        done
+        # One more retry after cleanup
+        if ! retry_heavy tofu apply -auto-approve; then
+            log_error "Head services deployment failed"
+            return 1
+        fi
     fi
 
     log_success "Head services deployment completed"

@@ -139,22 +139,21 @@ deploy_base_infrastructure() {
 
     # Check current state
     log "Checking current infrastructure state..."
-    if tofu plan -var-file tfvars/vars-all.tfvars -detailed-exitcode >/dev/null 2>&1; then
-        exit_code=$?
-        case $exit_code in
-            0)
-                log "Infrastructure is up to date, no changes needed"
-                return 0
-                ;;
-            1)
-                log_error "Terraform plan failed"
-                return 1
-                ;;
-            2)
-                log "Changes detected, applying infrastructure updates..."
-                ;;
-        esac
-    fi
+    tofu plan -var-file tfvars/vars-all.tfvars -detailed-exitcode >/dev/null 2>&1
+    exit_code=$?
+    case $exit_code in
+        0)
+            log "Infrastructure is up to date, no changes needed"
+            return 0
+            ;;
+        1)
+            log_error "Terraform plan failed"
+            return 1
+            ;;
+        2)
+            log "Changes detected, applying infrastructure updates..."
+            ;;
+    esac
 
     # Apply Terraform configuration
     log "Applying base infrastructure (this may take 15-30 minutes)..."
@@ -358,22 +357,21 @@ EOF
 
     # Check current state before applying
     log "Checking current head services state..."
-    if tofu plan -detailed-exitcode >/dev/null 2>&1; then
-        exit_code=$?
-        case $exit_code in
-            0)
-                log "Head services are up to date, no changes needed"
-                return 0
-                ;;
-            1)
-                log_error "Terraform plan failed"
-                return 1
-                ;;
-            2)
-                log "Changes detected, applying head services updates..."
-                ;;
-        esac
-    fi
+    tofu plan -detailed-exitcode >/dev/null 2>&1
+    exit_code=$?
+    case $exit_code in
+        0)
+            log "Head services are up to date, no changes needed"
+            return 0
+            ;;
+        1)
+            log_error "Terraform plan failed"
+            return 1
+            ;;
+        2)
+            log "Changes detected, applying head services updates..."
+            ;;
+    esac
 
     # Apply head services configuration
     log "Applying head services configuration (this may take 20-40 minutes)..."

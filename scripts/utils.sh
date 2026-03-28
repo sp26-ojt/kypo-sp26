@@ -22,10 +22,11 @@ log_success() {
     echo "[$(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $1"
 }
 
-# Retry function for unreliable operations
+# Retry function - dùng trực tiếp hoặc qua retry_heavy
+# Tham số env: RETRY_ATTEMPTS (default 3), RETRY_DELAY (default 5)
 retry() {
-    local max_attempts=3
-    local delay=5
+    local max_attempts="${RETRY_ATTEMPTS:-3}"
+    local delay="${RETRY_DELAY:-5}"
     local attempt=1
     local exit_code=0
 
@@ -43,25 +44,9 @@ retry() {
     return $exit_code
 }
 
-# Retry function for heavy/slow operations
+# Retry cho heavy operations (tofu apply, helm install...)
 retry_heavy() {
-    local max_attempts=5
-    local delay=30
-    local attempt=1
-    local exit_code=0
-
-    while [ $attempt -le $max_attempts ]; do
-        if "$@"; then
-            return 0
-        fi
-        exit_code=$?
-        log_warning "Attempt $attempt/$max_attempts failed. Retrying in ${delay}s..."
-        sleep $delay
-        ((attempt++))
-    done
-
-    log_error "All $max_attempts attempts failed for command: $*"
-    return $exit_code
+    RETRY_ATTEMPTS=5 RETRY_DELAY=30 retry "$@"
 }
 
 # Wait for network connectivity

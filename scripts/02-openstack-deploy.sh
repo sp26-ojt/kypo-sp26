@@ -20,8 +20,15 @@ setup_python_environment() {
     log "Setting up Python virtual environment for Kolla-Ansible..."
 
     if [ -d "$VENV_PATH" ]; then
-        log_warning "Virtual environment already exists, removing..."
-        rm -rf "$VENV_PATH"
+        # Chỉ xóa nếu có flag --force, tránh mất 10-15 phút cài lại khi re-deploy
+        if [ "${FORCE_VENV_REBUILD:-false}" = "true" ]; then
+            log_warning "FORCE_VENV_REBUILD=true: Removing existing virtual environment..."
+            rm -rf "$VENV_PATH"
+        else
+            log "Virtual environment already exists, reusing (set FORCE_VENV_REBUILD=true to rebuild)"
+            source "$VENV_PATH/bin/activate"
+            return 0
+        fi
     fi
 
     python3 -m venv "$VENV_PATH" --system-site-packages

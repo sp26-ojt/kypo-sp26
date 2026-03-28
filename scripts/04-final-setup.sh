@@ -26,8 +26,12 @@ display_deployment_info() {
         return 1
     }
 
-    if ! head_host=$(tofu output -raw cluster_ip 2>/dev/null); then
-        log_warning "Could not retrieve head_host from Terraform output"
+    # Dùng PUBLIC_IP nếu có (đây là địa chỉ thực tế user truy cập)
+    # Fallback về cluster_ip nếu PUBLIC_IP không được set
+    if [ -n "${PUBLIC_IP:-}" ]; then
+        head_host="$PUBLIC_IP"
+    elif ! head_host=$(tofu output -raw cluster_ip 2>/dev/null); then
+        log_warning "Could not retrieve head_host"
         head_host="<unavailable>"
     fi
 

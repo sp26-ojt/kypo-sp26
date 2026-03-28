@@ -25,7 +25,7 @@ PUBLIC_IP="${PUBLIC_IP:-42.115.38.85}"
 
 # === CUSTOM: Docker images của bạn ===
 CUSTOM_FRONTEND_IMAGE="sp26ojt/frontend-platform"
-CUSTOM_FRONTEND_TAG="v6"
+CUSTOM_FRONTEND_TAG="v7"
 
 CUSTOM_TRAINING_IMAGE="nnm311/kypo-training-service"
 CUSTOM_TRAINING_TAG="v26"

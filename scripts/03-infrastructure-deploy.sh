@@ -20,12 +20,9 @@ BASE_TF_PATH="$REPO_PATH/tf-openstack-base"
 HEAD_TF_PATH="$REPO_PATH/tf-head-services"
 VENV_PATH="/root/kolla-ansible-venv"
 
-# Public IP of the host server (for external access without shuttle)
-PUBLIC_IP="${PUBLIC_IP:-42.115.38.85}"
-
 # === CUSTOM: Docker images của bạn ===
 CUSTOM_FRONTEND_IMAGE="sp26ojt/frontend-platform"
-CUSTOM_FRONTEND_TAG="v7"
+CUSTOM_FRONTEND_TAG="v6"
 
 CUSTOM_TRAINING_IMAGE="nnm311/kypo-training-service"
 CUSTOM_TRAINING_TAG="v26"
@@ -139,21 +136,22 @@ deploy_base_infrastructure() {
 
     # Check current state
     log "Checking current infrastructure state..."
-    tofu plan -var-file tfvars/vars-all.tfvars -detailed-exitcode >/dev/null 2>&1
-    exit_code=$?
-    case $exit_code in
-        0)
-            log "Infrastructure is up to date, no changes needed"
-            return 0
-            ;;
-        1)
-            log_error "Terraform plan failed"
-            return 1
-            ;;
-        2)
-            log "Changes detected, applying infrastructure updates..."
-            ;;
-    esac
+    if tofu plan -var-file tfvars/vars-all.tfvars -detailed-exitcode >/dev/null 2>&1; then
+        exit_code=$?
+        case $exit_code in
+            0)
+                log "Infrastructure is up to date, no changes needed"
+                return 0
+                ;;
+            1)
+                log_error "Terraform plan failed"
+                return 1
+                ;;
+            2)
+                log "Changes detected, applying infrastructure updates..."
+                ;;
+        esac
+    fi
 
     # Apply Terraform configuration
     log "Applying base infrastructure (this may take 15-30 minutes)..."
@@ -221,8 +219,7 @@ setup_head_services_variables() {
         return 1
     }
 
-    # Use public IP for head_host so Keycloak and all services use accessible URL
-    head_host="${PUBLIC_IP:-$(tofu output -raw cluster_ip)}" || {
+    head_host=$(tofu output -raw cluster_ip) || {
         log_error "Failed to get head_host output"
         return 1
     }
@@ -357,21 +354,22 @@ EOF
 
     # Check current state before applying
     log "Checking current head services state..."
-    tofu plan -detailed-exitcode >/dev/null 2>&1
-    exit_code=$?
-    case $exit_code in
-        0)
-            log "Head services are up to date, no changes needed"
-            return 0
-            ;;
-        1)
-            log_error "Terraform plan failed"
-            return 1
-            ;;
-        2)
-            log "Changes detected, applying head services updates..."
-            ;;
-    esac
+    if tofu plan -detailed-exitcode >/dev/null 2>&1; then
+        exit_code=$?
+        case $exit_code in
+            0)
+                log "Head services are up to date, no changes needed"
+                return 0
+                ;;
+            1)
+                log_error "Terraform plan failed"
+                return 1
+                ;;
+            2)
+                log "Changes detected, applying head services updates..."
+                ;;
+        esac
+    fi
 
     # Apply head services configuration
     log "Applying head services configuration (this may take 20-40 minutes)..."

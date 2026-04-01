@@ -177,7 +177,10 @@ read_logs() {
 
     cd "$REPO_DIR" || exit
 
-    LOG_COMMAND="bash --login -c '
+    LOG_COMMAND="sudo bash --login -c '
+ulimit -n 65536
+sysctl -w fs.inotify.max_user_instances=512 > /dev/null 2>&1
+sysctl -w fs.inotify.max_user_watches=524288 > /dev/null 2>&1
 while true; do
     echo \"\"
     echo \"============================================\"
@@ -193,11 +196,11 @@ while true; do
     echo \"--------------------------------------------\"
     read -p \"Lựa chọn (1-7): \" choice
     case \$choice in
-        1) sudo kubectl get pods -A; read -p \"Nhấn Enter...\" ;;
-        2) sudo kubectl logs -f -l \"app.kubernetes.io/name=sandbox-service\" -n crczp --tail=50 ;;
-        3) sudo kubectl logs -f -l \"app.kubernetes.io/name=sandbox-service-worker-ansible\" -n crczp --tail=50 ;;  
-        4) sudo kubectl logs -f -l \"app.kubernetes.io/name=uag-service\" -n crczp --tail=50 ;;
-        5) sudo kubectl logs -f -l \"app.kubernetes.io/name=training-service\" -n crczp --tail=50 ;;
+        1) kubectl get pods -A; read -p \"Nhấn Enter...\" ;;
+        2) kubectl logs -l \"app.kubernetes.io/name=sandbox-service\" -n crczp --tail=50; read -p \"Ấn Enter để quay lại menu...\" ;;
+        3) kubectl logs -l \"app.kubernetes.io/name=sandbox-service-worker-ansible\" -n crczp --tail=50; read -p \"Ấn Enter để quay lại menu...\" ;;
+        4) kubectl logs -l \"app.kubernetes.io/name=uag-service\" -n crczp --tail=50; read -p \"Ấn Enter để quay lại menu...\" ;;
+        5) kubectl logs -l \"app.kubernetes.io/name=training-service\" -n crczp --tail=50; read -p \"Ấn Enter để quay lại menu...\" ;;
         6) echo \"Gõ exit để quay lại\"; /bin/bash ;;
         7) exit 0 ;;
         *) echo \"Lựa chọn không hợp lệ!\" ;;
@@ -250,9 +253,10 @@ soft_restart() {
         echo "3. Xem trạng thái Pods hiện tại"
         echo "4. Xóa Pod bị CrashLoopBackOff / Error (tự tạo lại)"
         echo "5. Restart CoreDNS"
-        echo "6. Quay lại Menu chính"
+        echo "6. Fix: too many open files (tăng inotify limit)"
+        echo "7. Quay lại Menu chính"
         echo "-------------------------------------------------------"
-        read -p "Lựa chọn (1-6): " rs_opt
+        read -p "Lựa chọn (1-7): " rs_opt
 
         case $rs_opt in
         1)
@@ -294,6 +298,14 @@ soft_restart() {
             read -p "Nhấn Enter..."
             ;;
         6)
+            echo "Đang tăng inotify limits để fix 'too many open files'..."
+            _run_in_vm "sysctl -w fs.inotify.max_user_instances=1024 && sysctl -w fs.inotify.max_user_watches=1048576 && sysctl -w fs.file-max=2097152 && echo 'fs.inotify.max_user_instances=1024' >> /etc/sysctl.conf && echo 'fs.inotify.max_user_watches=1048576' >> /etc/sysctl.conf && echo 'fs.file-max=2097152' >> /etc/sysctl.conf"
+            echo "Đang restart các worker pods để áp dụng..."
+            _run_in_vm "kubectl rollout restart deployment -n crczp"
+            echo "Done. Kiểm tra lại log sau vài giây."
+            read -p "Nhấn Enter..."
+            ;;
+        7)
             break
             ;;
         *)

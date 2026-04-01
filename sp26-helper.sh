@@ -14,7 +14,7 @@ show_menu() {
     echo "======================================================="
     echo "   KYPO SP26 - CÔNG CỤ QUẢN LÝ CÀI ĐẶT TỰ ĐỘNG"
     echo "======================================================="
-    echo "1. BUILD MỚI (Khởi chạy quy trình chuẩn)"
+    echo "1. BUILD MỚI (Khởi chạy quy trình chuẩn 4 bước)"
     echo "2. XEM LOG HỆ THỐNG (SSH vào VM & Chọn Log)"
     echo "3. RESTART MỀM (Khởi động lại dịch vụ khi bị nghẽn)"
     echo "4. DỌN DẸP & RESET (Xóa tiến độ cũ để làm lại)"
@@ -25,7 +25,7 @@ show_menu() {
 
 # --- LỰA CHỌN 1: BUILD ---
 run_build() {
-    echo "--- [1/5] Syncing repository ---"
+    echo "--- [1/4] Syncing repository ---"
     if [ ! -d "$REPO_DIR" ]; then
         echo "Cloning repository..."
         git clone "$REPO_URL"
@@ -42,7 +42,7 @@ run_build() {
     chmod +x scripts/*.sh 2>/dev/null
 
     # --- [2/5] Cài đặt dependencies ---
-    echo "--- [2/5] Installing system dependencies ---"
+    echo "--- [2/4] Installing system dependencies ---"
     sudo apt update
     sudo apt install -y qemu-kvm libvirt-daemon libvirt-clients bridge-utils \
         virt-manager docker.io screen wget curl git
@@ -53,7 +53,7 @@ run_build() {
     fi
 
     # --- [3/5] Chuẩn bị Images ---
-    echo "--- [3/5] Image Preparation ---"
+    echo "--- [3/4] Image Preparation ---"
     HTTP_DIR="http"
     mkdir -p "$HTTP_DIR"
 
@@ -120,39 +120,25 @@ run_build() {
         esac
     done
 
-    # --- [4/5] Cấu hình IP ---
-    echo "--- [4/5] Cấu hình IP ---"
-
-    # Thử detect public IP, fallback về hostname -I nếu không có internet
-    echo "Đang detect Public IP..."
-    AUTO_IP=$(curl -s --max-time 5 ifconfig.me 2>/dev/null \
-           || curl -s --max-time 5 api.ipify.org 2>/dev/null \
-           || hostname -I | awk '{print $1}')
-
-    echo "IP tự động phát hiện: $AUTO_IP"
-    read -p "Nhập Public IP (Enter để dùng $AUTO_IP): " PUBLIC_IP_INPUT
-    REAL_PUBLIC_IP=${PUBLIC_IP_INPUT:-$AUTO_IP}
-
-    DEPLOY_FILE="scripts/03-infrastructure-deploy.sh"
-    if [ -f "$DEPLOY_FILE" ]; then
-        echo "Cập nhật PUBLIC_IP trong $DEPLOY_FILE: $REAL_PUBLIC_IP"
-        # Thay toàn bộ dòng khai báo PUBLIC_IP, bất kể IP cũ là gì
-        sed -i "s|^PUBLIC_IP=.*|PUBLIC_IP=\"\${PUBLIC_IP:-$REAL_PUBLIC_IP}\"|" "$DEPLOY_FILE"
-    else
-        echo "Cảnh báo: Không tìm thấy $DEPLOY_FILE"
-    fi
-
+    # --- Xác nhận cấu hình trước khi build ---
+    echo "--- Xác nhận cấu hình ---"
     echo ""
     echo "======================================================="
     echo "XÁC NHẬN CẤU HÌNH"
     echo "-------------------------------------------------------"
-    echo "Public IP (head_host): $REAL_PUBLIC_IP"
-    echo "Images dir:            $REPO_DIR/$HTTP_DIR/"
+    echo "Images dir: $REPO_DIR/$HTTP_DIR/"
+    echo "  Tên file cần có:"
+    for item in "${IMAGES[@]}"; do
+        echo "    - $(echo "$item" | cut -d'|' -f1)"
+    done
+    echo "-------------------------------------------------------"
+    echo "Lưu ý: head_host sẽ được lấy tự động từ OpenStack"
+    echo "       sau khi Terraform deploy xong (cluster_ip output)."
     echo "-------------------------------------------------------"
     read -p "Nhấn Enter để bắt đầu BUILD..."
 
-    # --- [5/5] Vagrant Up ---
-    echo "--- [5/5] KYPO BUILD (vagrant up via Docker) ---"
+    # --- [4/4] Vagrant Up ---
+    echo "--- [4/4] KYPO BUILD (vagrant up via Docker) ---"
     screen -S kypo_build -X quit 2>/dev/null
 
     VAGRANT_CMD="docker run -it --rm \
@@ -207,11 +193,11 @@ while true; do
     echo \"--------------------------------------------\"
     read -p \"Lựa chọn (1-7): \" choice
     case \$choice in
-        1) kubectl get pods -A; read -p \"Nhấn Enter...\" ;;
-        2) kubectl logs -f -l \"app.kubernetes.io/name=sandbox-service\" -n crczp --tail=50 ;;
-        3) kubectl logs -f -l \"app.kubernetes.io/name=sandbox-service-worker-ansible\" -n crczp --tail=50 ;;
-        4) kubectl logs -f -l \"app.kubernetes.io/name=uag-service\" -n crczp --tail=50 ;;
-        5) kubectl logs -f -l \"app.kubernetes.io/name=training-service\" -n crczp --tail=50 ;;
+        1) sudo kubectl get pods -A; read -p \"Nhấn Enter...\" ;;
+        2) sudo kubectl logs -f -l \"app.kubernetes.io/name=sandbox-service\" -n crczp --tail=50 ;;
+        3) sudo kubectl logs -f -l \"app.kubernetes.io/name=sandbox-service-worker-ansible\" -n crczp --tail=50 ;;  
+        4) sudo kubectl logs -f -l \"app.kubernetes.io/name=uag-service\" -n crczp --tail=50 ;;
+        5) sudo kubectl logs -f -l \"app.kubernetes.io/name=training-service\" -n crczp --tail=50 ;;
         6) echo \"Gõ exit để quay lại\"; /bin/bash ;;
         7) exit 0 ;;
         *) echo \"Lựa chọn không hợp lệ!\" ;;
@@ -279,7 +265,7 @@ soft_restart() {
             ;;
         2)
             echo "Danh sách deployments trong namespace crczp:"
-            _run_in_vm "kubectl get deployments -n crczp --no-headers | awk '{print NR\". \"\$1}'"
+            _run_in_vm "kubectl get deployments -n crczp"
             echo ""
             read -p "Nhập tên deployment cần restart: " DEPLOY_NAME
             if [ -n "$DEPLOY_NAME" ]; then
@@ -298,7 +284,7 @@ soft_restart() {
             ;;
         4)
             echo "Đang xóa các pods bị lỗi (CrashLoopBackOff / Error / OOMKilled)..."
-            _run_in_vm "kubectl get pods -n crczp --no-headers | awk '\$3==\"CrashLoopBackOff\" || \$3==\"Error\" || \$3==\"OOMKilled\" {print \$1}' | xargs -r kubectl delete pod -n crczp"
+            _run_in_vm "kubectl get pods -n crczp --no-headers | grep -E 'CrashLoopBackOff|OOMKilled|Error' | tr -s ' ' | cut -d' ' -f1 | xargs -r kubectl delete pod -n crczp"
             echo "Pods lỗi đã bị xóa. Kubernetes sẽ tự tạo lại."
             read -p "Nhấn Enter..."
             ;;

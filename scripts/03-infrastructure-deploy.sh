@@ -224,6 +224,14 @@ setup_head_services_variables() {
         return 1
     }
 
+    # Nếu PUBLIC_IP được truyền vào (nginx proxy mode), dùng nó làm head_host
+    # và bật self_signed vì Let's Encrypt không cấp cert cho IP address
+    if [ -n "$PUBLIC_IP" ]; then
+        log "PUBLIC_IP env var detected: using $PUBLIC_IP as head_host (self_signed=true)"
+        head_host="$PUBLIC_IP"
+        export TF_VAR_self_signed=true
+    fi
+
     proxy_host=$(tofu output -raw proxy_host) || {
         log_error "Failed to get proxy_host output"
         return 1

@@ -5,7 +5,6 @@
 # =================================================================
 
 REPO_URL="https://github.com/sp26-ojt/kypo-sp26.git"
-REPO_DIR="kypo-sp26"
 DEBUG_FILE="debug.txt"
 CONFIG_FILE="sp26.conf"
 
@@ -87,7 +86,7 @@ run_build() {
         case $img_option in
         1)
             echo "[HƯỚNG DẪN]"
-            echo "Copy 4 file image vào thư mục: $REPO_DIR/$HTTP_DIR/"
+            echo "Copy 4 file image vào thư mục: http/"
             echo "Tên file cần có:"
             for item in "${IMAGES[@]}"; do
                 echo "  - $(echo "$item" | cut -d'|' -f1)"
@@ -105,7 +104,7 @@ run_build() {
             echo "  -> Copy mã CODE được hiển thị."
             echo ""
             echo "BƯỚC B (Server này - MÁY NHẬN):"
-            echo "  cd $REPO_DIR/$HTTP_DIR"
+            echo "  cd http/"
             echo "  croc <mã_code>"
             echo "======================================================="
             read -p "Nhấn Enter để tiếp tục..."
@@ -137,7 +136,7 @@ run_build() {
     echo "======================================================="
     echo "XÁC NHẬN CẤU HÌNH"
     echo "-------------------------------------------------------"
-    echo "Images dir: $REPO_DIR/$HTTP_DIR/"
+    echo "Images dir: http/"
     echo "  Tên file cần có:"
     for item in "${IMAGES[@]}"; do
         echo "    - $(echo "$item" | cut -d'|' -f1)"
@@ -283,14 +282,6 @@ read_logs() {
     echo "   TRUY CẬP MÁY ẢO & QUẢN LÝ HỆ THỐNG"
     echo "======================================================="
 
-    if [ ! -d "$REPO_DIR" ]; then
-        echo "Lỗi: Không tìm thấy thư mục $REPO_DIR."
-        read -p "Nhấn Enter để quay lại..."
-        return
-    fi
-
-    cd "$REPO_DIR" || exit
-
     LOG_COMMAND="sudo bash --login -c '
 ulimit -n 65536
 sysctl -w fs.inotify.max_user_instances=512 > /dev/null 2>&1
@@ -331,19 +322,12 @@ done'"
         vagrantlibvirt/vagrant-libvirt:latest \
         vagrant ssh -- -t "$LOG_COMMAND"
 
-    cd ..
     read -p "Nhấn Enter để quay lại Menu..."
 }
 
 # --- LỰA CHỌN 3: RESTART MỀM ---
 _run_in_vm() {
-    # Chạy lệnh bên trong VM qua vagrant ssh
     local cmd="$1"
-    if [ ! -d "$REPO_DIR" ]; then
-        echo "Lỗi: Không tìm thấy thư mục $REPO_DIR."
-        return 1
-    fi
-    cd "$REPO_DIR" || return 1
     docker run -it --rm \
         -e LIBVIRT_DEFAULT_URI \
         -v /var/run/libvirt/:/var/run/libvirt/ \
@@ -353,7 +337,6 @@ _run_in_vm() {
         --network host \
         vagrantlibvirt/vagrant-libvirt:latest \
         vagrant ssh -- -t "sudo bash -c '$cmd'"
-    cd ..
 }
 
 soft_restart() {
@@ -435,11 +418,11 @@ force_cleanup() {
     echo "======================================================="
     echo "   CẢNH BÁO: HÀNH ĐỘNG NÀY SẼ XÓA TOÀN BỘ HỆ THỐNG"
     echo "======================================================="
-    echo "Nhập chính xác tên repo để xác nhận: $REPO_DIR"
+    echo "Nhập chính xác 'yes' để xác nhận xóa toàn bộ:"
     echo "-------------------------------------------------------"
     read -p "Xác nhận: " CONFIRM_NAME
 
-    if [ "$CONFIRM_NAME" != "$REPO_DIR" ]; then
+    if [ "$CONFIRM_NAME" != "yes" ]; then
         echo "Tên không khớp! Hủy bỏ."
         read -p "Nhấn Enter..."
         return
@@ -448,21 +431,17 @@ force_cleanup() {
     echo "--- BẮT ĐẦU DỌN DẸP ---"
     sudo pkill screen 2>/dev/null
 
-    if [ -d "$REPO_DIR" ]; then
-        cd "$REPO_DIR" || exit
-        echo "Đang chạy vagrant destroy..."
-        docker run -it --rm \
-            -e LIBVIRT_DEFAULT_URI \
-            -v /var/run/libvirt/:/var/run/libvirt/ \
-            -v ~/.vagrant.d:/.vagrant.d \
-            -v "$(realpath "${PWD}")":"${PWD}" \
-            -w "${PWD}" \
-            --network host \
-            vagrantlibvirt/vagrant-libvirt:latest \
-            vagrant destroy -f
-        rm -rf .vagrant
-        cd ..
-    fi
+    echo "Đang chạy vagrant destroy..."
+    docker run -it --rm \
+        -e LIBVIRT_DEFAULT_URI \
+        -v /var/run/libvirt/:/var/run/libvirt/ \
+        -v ~/.vagrant.d:/.vagrant.d \
+        -v "$(realpath "${PWD}")":"${PWD}" \
+        -w "${PWD}" \
+        --network host \
+        vagrantlibvirt/vagrant-libvirt:latest \
+        vagrant destroy -f
+    rm -rf .vagrant
 
     DOCKER_IDS=$(docker ps -a | grep "vagrant-libvirt" | awk '{print $1}')
     [ -n "$DOCKER_IDS" ] && docker rm -f $DOCKER_IDS 2>/dev/null
@@ -498,7 +477,7 @@ setup_nginx_proxy() {
         fi
     fi
 
-    REPO_ABS="$(realpath "$REPO_DIR" 2>/dev/null || echo "$PWD/$REPO_DIR")"
+    REPO_ABS="$(realpath "${PWD}")"
     NGINX_SETUP_SCRIPT="/tmp/kypo_nginx_manual_$$.sh"
     cat > "$NGINX_SETUP_SCRIPT" << NGINX_SCRIPT
 #!/bin/bash

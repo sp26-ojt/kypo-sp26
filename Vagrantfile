@@ -1,5 +1,4 @@
 # -*- mode: ruby -*-
-
 # vi: set ft=ruby :
 
 dns1 = ENV["DNS1"] || "1.1.1.1"
@@ -13,64 +12,39 @@ Vagrant.configure(2) do |config|
   config.vm.box_version = "202508.03.0"
   config.vm.hostname = "openstack"
 
-  config.vm.network :private_network,
-    ip: "10.1.2.10"
+  config.vm.network :private_network, ip: "10.1.2.10"
+  config.vm.network :private_network, ip: "10.1.2.11", auto_config: false
 
-  config.vm.network :private_network,
-    ip: "10.1.2.11",
-    auto_config: false
+  # 9p mount — truy cập trực tiếp thư mục host, không copy
+  config.vm.synced_folder ".", "/vagrant", type: "9p", accessmode: "mapped"
 
-  # Shared folder — 9p mount trực tiếp từ host
-  config.vm.synced_folder ".", "/vagrant", type: "9p", accessmode: "mapped"  config.vm.provider :libvirt do |libvirt|
+  config.vm.provider :libvirt do |libvirt|
     libvirt.cpus = cpu
     libvirt.memory = ram
     libvirt.nested = true
     libvirt.machine_virtual_size = 250
   end
 
-  # File provisioning - copy configuration and scripts
-  config.vm.provision "file",
-    source: "ansible.cfg",
-    destination: "/tmp/ansible.cfg",
-    run: "once"
+  # Copy scripts và ansible config vào VM
+  config.vm.provision "file", source: "ansible.cfg", destination: "/tmp/ansible.cfg", run: "once"
+  config.vm.provision "file", source: "scripts/", destination: "/tmp/", run: "once"
 
-  config.vm.provision "file",
-    source: "scripts/",
-    destination: "/tmp/",
-    run: "once"
-
-  # Copy images vào đúng chỗ trong VM (9p mount có thể không thấy files lớn)
+  # Kiểm tra images có thấy qua 9p không
   config.vm.provision "shell",
-    name: "Ensure images in /vagrant/http",
+    name: "Check images mount",
     privileged: true,
     run: "once",
     inline: <<-SHELL
-      mkdir -p /vagrant/http
-      for img in noble-server-cloudimg-amd64.img debian-12-genericcloud-amd64.qcow2 kali.qcow2 ubuntu-noble-man.qcow2; do
-        if [ ! -f "/vagrant/http/$img" ]; then
-          echo "[images] $img not found via 9p mount, checking /mnt..."
-          # Thử mount lại 9p nếu chưa có
-          if mountpoint -q /vagrant; then
-            echo "[images] /vagrant is mounted but $img missing — host path may differ"
-          else
-            echo "[images] /vagrant not mounted"
-          fi
-        else
-          echo "[images] $img OK ($(du -sh /vagrant/http/$img | cut -f1))"
-        fi
-      done
-      ls -lh /vagrant/http/
+      echo "=== /vagrant mount check ==="
+      mountpoint /vagrant && echo "mounted OK" || echo "NOT mounted"
+      ls -lh /vagrant/http/ 2>/dev/null || echo "http/ not accessible"
     SHELL
 
   # Phase 1: System Setup
   config.vm.provision "system-setup",
     type: "shell",
     name: "System Setup and Package Installation",
-    env: {
-      "DNS1" => dns1,
-      "DNS2" => dns2,
-      "RAM" => ram.to_s
-    },
+    env: { "DNS1" => dns1, "DNS2" => dns2, "RAM" => ram.to_s },
     path: "scripts/01-system-setup.sh",
     run: "once"
 
@@ -86,11 +60,7 @@ Vagrant.configure(2) do |config|
   config.vm.provision "infrastructure-deployment",
     type: "shell",
     name: "Kubernetes and Application Infrastructure",
-    env: {
-      "DNS1" => dns1,
-      "DNS2" => dns2,
-      "PUBLIC_IP" => ENV["PUBLIC_IP"] || ""
-    },
+    env: { "DNS1" => dns1, "DNS2" => dns2, "PUBLIC_IP" => ENV["PUBLIC_IP"] || "" },
     path: "scripts/03-infrastructure-deploy.sh",
     run: "once",
     privileged: true
@@ -102,4 +72,5 @@ Vagrant.configure(2) do |config|
     path: "scripts/04-final-setup.sh",
     run: "once",
     privileged: true
+
 end

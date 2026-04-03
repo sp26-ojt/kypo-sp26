@@ -25,10 +25,10 @@ CUSTOM_FRONTEND_IMAGE="sp26ojt/frontend-platform"
 CUSTOM_FRONTEND_TAG="v25"
 
 CUSTOM_TRAINING_IMAGE="nnm311/kypo-training-service"
-CUSTOM_TRAINING_TAG="v28"
+CUSTOM_TRAINING_TAG="v26"
 
 CUSTOM_ADAPTIVE_TRAINING_IMAGE="nnm311/kypo-adaptive-training-service"
-CUSTOM_ADAPTIVE_TRAINING_TAG="v2"
+CUSTOM_ADAPTIVE_TRAINING_TAG="v1"
 # ======================================
 
 # Setup application credentials
@@ -223,14 +223,6 @@ setup_head_services_variables() {
         log_error "Failed to get head_host output"
         return 1
     }
-
-    # Nếu PUBLIC_IP được truyền vào (nginx proxy mode), dùng nó làm head_host
-    # và bật self_signed vì Let's Encrypt không cấp cert cho IP address
-    if [ -n "$PUBLIC_IP" ]; then
-        log "PUBLIC_IP env var detected: using $PUBLIC_IP as head_host (self_signed=true)"
-        head_host="$PUBLIC_IP"
-        export TF_VAR_self_signed=true
-    fi
 
     proxy_host=$(tofu output -raw proxy_host) || {
         log_error "Failed to get proxy_host output"

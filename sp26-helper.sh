@@ -5,8 +5,8 @@
 # =================================================================
 
 REPO_URL="https://github.com/sp26-ojt/kypo-sp26.git"
+REPO_DIR="kypo-sp26"
 DEBUG_FILE="debug.txt"
-CONFIG_FILE="sp26.conf"
 
 # --- MENU CHÍNH ---
 show_menu() {
@@ -18,37 +18,27 @@ show_menu() {
     echo "2. XEM LOG HỆ THỐNG (SSH vào VM & Chọn Log)"
     echo "3. RESTART MỀM (Khởi động lại dịch vụ khi bị nghẽn)"
     echo "4. DỌN DẸP & RESET (Xóa tiến độ cũ để làm lại)"
-    echo "5. SETUP NGINX PROXY (Re-setup truy cập qua Public IP)"
-    echo "6. THOÁT"
+    echo "5. THOÁT"
     echo "-------------------------------------------------------"
-    read -p "Lựa chọn của bạn (1-6): " main_opt
+    read -p "Lựa chọn của bạn (1-5): " main_opt
 }
 
 # --- LỰA CHỌN 1: BUILD ---
 run_build() {
-    # Hỏi public IP — bắt buộc để KYPO dùng đúng head_host
-    echo "-------------------------------------------------------"
-    echo "NHẬP PUBLIC IP CỦA SERVER NÀY:"
-    echo "  KYPO sẽ dùng IP này làm địa chỉ truy cập portal."
-    echo "  (Keycloak redirect URI, TLS cert đều config theo IP này)"
-    echo "-------------------------------------------------------"
-    while true; do
-        read -r -p "Public IP: " PUBLIC_IP < /dev/tty
-        PUBLIC_IP="$(echo "$PUBLIC_IP" | tr -d '[:space:]')"
-        if [ -n "$PUBLIC_IP" ]; then
-            echo "PUBLIC_IP=$PUBLIC_IP" > "$CONFIG_FILE"
-            echo "Đã lưu Public IP: $PUBLIC_IP"
-            break
-        fi
-        echo "Vui lòng nhập IP, không được để trống."
-    done
-    echo ""
-
     echo "--- [1/4] Syncing repository ---"
-    # Script đang chạy từ trong repo, chỉ cần pull bản mới nhất
-    git fetch --all
-    git reset --hard origin/master 2>/dev/null || git reset --hard origin/main
-    git clean -fd
+    if [ ! -d "$REPO_DIR" ]; then
+        echo "Cloning repository..."
+        git clone "$REPO_URL"
+    else
+        echo "Repository '$REPO_DIR' đã tồn tại. Đang force overwrite..."
+        cd "$REPO_DIR" || exit
+        git fetch --all
+        git reset --hard origin/main || git reset --hard origin/master
+        git clean -fd
+        cd ..
+    fi
+
+    cd "$REPO_DIR" || { echo "Không thể vào thư mục $REPO_DIR"; exit 1; }
     chmod +x scripts/*.sh 2>/dev/null
 
     # --- [2/5] Cài đặt dependencies ---
@@ -86,7 +76,7 @@ run_build() {
         case $img_option in
         1)
             echo "[HƯỚNG DẪN]"
-            echo "Copy 4 file image vào thư mục: http/"
+            echo "Copy 4 file image vào thư mục: $REPO_DIR/$HTTP_DIR/"
             echo "Tên file cần có:"
             for item in "${IMAGES[@]}"; do
                 echo "  - $(echo "$item" | cut -d'|' -f1)"
@@ -104,7 +94,7 @@ run_build() {
             echo "  -> Copy mã CODE được hiển thị."
             echo ""
             echo "BƯỚC B (Server này - MÁY NHẬN):"
-            echo "  cd http/"
+            echo "  cd $REPO_DIR/$HTTP_DIR"
             echo "  croc <mã_code>"
             echo "======================================================="
             read -p "Nhấn Enter để tiếp tục..."
@@ -136,14 +126,14 @@ run_build() {
     echo "======================================================="
     echo "XÁC NHẬN CẤU HÌNH"
     echo "-------------------------------------------------------"
-    echo "Images dir: http/"
+    echo "Images dir: $REPO_DIR/$HTTP_DIR/"
     echo "  Tên file cần có:"
     for item in "${IMAGES[@]}"; do
         echo "    - $(echo "$item" | cut -d'|' -f1)"
     done
     echo "-------------------------------------------------------"
-    echo "Lưu ý: KYPO sẽ dùng Public IP $PUBLIC_IP làm head_host."
-    echo "       Nginx proxy sẽ tự được setup sau khi vagrant up xong."
+    echo "Lưu ý: head_host sẽ được lấy tự động từ OpenStack"
+    echo "       sau khi Terraform deploy xong (cluster_ip output)."
     echo "-------------------------------------------------------"
     read -p "Nhấn Enter để bắt đầu BUILD..."
 
@@ -151,105 +141,8 @@ run_build() {
     echo "--- [4/4] KYPO BUILD (vagrant up via Docker) ---"
     screen -S kypo_build -X quit 2>/dev/null
 
-    REPO_ABS="$(realpath "${PWD}")"
-
-    # Ghi nginx setup script ra file tạm để screen gọi sau khi vagrant up xong
-    NGINX_SETUP_SCRIPT="/tmp/kypo_nginx_setup_$$.sh"
-    cat > "$NGINX_SETUP_SCRIPT" << NGINX_SCRIPT
-#!/bin/bash
-set -e
-PUBLIC_IP="$PUBLIC_IP"
-CERT_DIR="/etc/nginx/ssl/kypo"
-
-echo "=== Cài đặt nginx ==="
-apt-get update -qq && apt-get install -y --reinstall nginx openssl
-
-mkdir -p "\$CERT_DIR"
-openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-    -keyout "\$CERT_DIR/key.pem" \
-    -out "\$CERT_DIR/cert.pem" \
-    -subj "/CN=\$PUBLIC_IP" \
-    -addext "subjectAltName=IP:\$PUBLIC_IP" 2>/dev/null
-
-echo "=== Lấy cluster_ip từ VM ==="
-CLUSTER_IP=\$(docker run --rm \
-    -e LIBVIRT_DEFAULT_URI \
-    -v /var/run/libvirt/:/var/run/libvirt/ \
-    -v ~/.vagrant.d:/.vagrant.d \
-    -v "$REPO_ABS":"$REPO_ABS" \
-    -w "$REPO_ABS" \
-    --network host \
-    vagrantlibvirt/vagrant-libvirt:latest \
-    vagrant ssh -- -t "cd /root/devops-tf-deployment/tf-openstack-base && tofu output -raw cluster_ip 2>/dev/null" 2>/dev/null | tr -d '\r\n ')
-
-if [ -z "\$CLUSTER_IP" ]; then
-    echo "WARN: Không lấy được cluster_ip, dùng 10.1.2.10 làm fallback"
-    CLUSTER_IP="10.1.2.10"
-fi
-echo "cluster_ip = \$CLUSTER_IP"
-
-cat > /etc/nginx/sites-available/kypo-proxy << EOF
-# KYPO Portal + Keycloak — HTTPS reverse proxy
-server {
-    listen 443 ssl;
-    server_name \$PUBLIC_IP;
-
-    ssl_certificate     \$CERT_DIR/cert.pem;
-    ssl_certificate_key \$CERT_DIR/key.pem;
-    ssl_protocols       TLSv1.2 TLSv1.3;
-
-    proxy_buffer_size        128k;
-    proxy_buffers            4 256k;
-    proxy_busy_buffers_size  256k;
-
-    location / {
-        proxy_pass            https://\$CLUSTER_IP;
-        proxy_ssl_verify      off;
-        proxy_ssl_server_name on;
-        proxy_ssl_name        \$PUBLIC_IP;
-        proxy_set_header      Host              \$PUBLIC_IP;
-        proxy_set_header      X-Real-IP         \\\$remote_addr;
-        proxy_set_header      X-Forwarded-For   \\\$proxy_add_x_forwarded_for;
-        proxy_set_header      X-Forwarded-Proto https;
-        proxy_read_timeout    300;
-        proxy_connect_timeout 300;
-        proxy_http_version    1.1;
-        proxy_set_header      Upgrade           \\\$http_upgrade;
-        proxy_set_header      Connection        "upgrade";
-    }
-}
-
-# OpenStack Horizon — HTTP proxy
-server {
-    listen 8080;
-    server_name \$PUBLIC_IP;
-
-    location / {
-        proxy_pass         http://10.1.2.10;
-        proxy_set_header   Host            \\\$host;
-        proxy_set_header   X-Real-IP       \\\$remote_addr;
-        proxy_set_header   X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-        proxy_read_timeout 120;
-    }
-}
-EOF
-
-ln -sf /etc/nginx/sites-available/kypo-proxy /etc/nginx/sites-enabled/kypo-proxy
-rm -f /etc/nginx/sites-enabled/default 2>/dev/null
-nginx -t && systemctl enable nginx && systemctl restart nginx
-
-echo "======================================================="
-echo "NGINX PROXY SẴN SÀNG!"
-echo "  KYPO Portal : https://\$PUBLIC_IP/"
-echo "  Horizon     : http://\$PUBLIC_IP:8080/"
-echo "  (Browser cảnh báo self-signed cert — bấm Advanced > Proceed)"
-echo "======================================================="
-NGINX_SCRIPT
-    chmod +x "$NGINX_SETUP_SCRIPT"
-
     VAGRANT_CMD="docker run -it --rm \
   -e LIBVIRT_DEFAULT_URI \
-  -e PUBLIC_IP=$PUBLIC_IP \
   -v /var/run/libvirt/:/var/run/libvirt/ \
   -v ~/.vagrant.d:/.vagrant.d \
   -v \$(realpath \"\${PWD}\"):\${PWD} \
@@ -258,20 +151,14 @@ NGINX_SCRIPT
   vagrantlibvirt/vagrant-libvirt:latest \
   vagrant up"
 
-    # vagrant up chạy trong Docker, nginx setup chạy trực tiếp trên host sau đó
-    screen -dmS kypo_build bash -c "
-$VAGRANT_CMD 2>&1 | tee $DEBUG_FILE
-echo '--- vagrant up done (exit='\${PIPESTATUS[0]}') ---' | tee -a $DEBUG_FILE
-sudo bash $NGINX_SETUP_SCRIPT 2>&1 | tee -a $DEBUG_FILE
-rm -f $NGINX_SETUP_SCRIPT
-"
+    screen -dmS kypo_build bash -c "$VAGRANT_CMD 2>&1 | tee ../$DEBUG_FILE"
 
     echo "-------------------------------------------------------"
     echo "BUILD ĐÃ KHỞI ĐỘNG!"
-    echo "  Theo dõi log: tail -f $PWD/$DEBUG_FILE"
+    echo "  Theo dõi log: tail -f $PWD/../$DEBUG_FILE"
     echo "  Live terminal: screen -r kypo_build"
-    echo "  Sau khi xong: https://$PUBLIC_IP/"
     echo "-------------------------------------------------------"
+    cd ..
     read -p "Nhấn Enter để về Menu..."
 }
 
@@ -281,6 +168,14 @@ read_logs() {
     echo "======================================================="
     echo "   TRUY CẬP MÁY ẢO & QUẢN LÝ HỆ THỐNG"
     echo "======================================================="
+
+    if [ ! -d "$REPO_DIR" ]; then
+        echo "Lỗi: Không tìm thấy thư mục $REPO_DIR."
+        read -p "Nhấn Enter để quay lại..."
+        return
+    fi
+
+    cd "$REPO_DIR" || exit
 
     LOG_COMMAND="sudo bash --login -c '
 ulimit -n 65536
@@ -322,12 +217,19 @@ done'"
         vagrantlibvirt/vagrant-libvirt:latest \
         vagrant ssh -- -t "$LOG_COMMAND"
 
+    cd ..
     read -p "Nhấn Enter để quay lại Menu..."
 }
 
 # --- LỰA CHỌN 3: RESTART MỀM ---
 _run_in_vm() {
+    # Chạy lệnh bên trong VM qua vagrant ssh
     local cmd="$1"
+    if [ ! -d "$REPO_DIR" ]; then
+        echo "Lỗi: Không tìm thấy thư mục $REPO_DIR."
+        return 1
+    fi
+    cd "$REPO_DIR" || return 1
     docker run -it --rm \
         -e LIBVIRT_DEFAULT_URI \
         -v /var/run/libvirt/:/var/run/libvirt/ \
@@ -337,6 +239,7 @@ _run_in_vm() {
         --network host \
         vagrantlibvirt/vagrant-libvirt:latest \
         vagrant ssh -- -t "sudo bash -c '$cmd'"
+    cd ..
 }
 
 soft_restart() {
@@ -418,11 +321,11 @@ force_cleanup() {
     echo "======================================================="
     echo "   CẢNH BÁO: HÀNH ĐỘNG NÀY SẼ XÓA TOÀN BỘ HỆ THỐNG"
     echo "======================================================="
-    echo "Nhập chính xác 'yes' để xác nhận xóa toàn bộ:"
+    echo "Nhập chính xác tên repo để xác nhận: $REPO_DIR"
     echo "-------------------------------------------------------"
     read -p "Xác nhận: " CONFIRM_NAME
 
-    if [ "$CONFIRM_NAME" != "yes" ]; then
+    if [ "$CONFIRM_NAME" != "$REPO_DIR" ]; then
         echo "Tên không khớp! Hủy bỏ."
         read -p "Nhấn Enter..."
         return
@@ -431,17 +334,21 @@ force_cleanup() {
     echo "--- BẮT ĐẦU DỌN DẸP ---"
     sudo pkill screen 2>/dev/null
 
-    echo "Đang chạy vagrant destroy..."
-    docker run -it --rm \
-        -e LIBVIRT_DEFAULT_URI \
-        -v /var/run/libvirt/:/var/run/libvirt/ \
-        -v ~/.vagrant.d:/.vagrant.d \
-        -v "$(realpath "${PWD}")":"${PWD}" \
-        -w "${PWD}" \
-        --network host \
-        vagrantlibvirt/vagrant-libvirt:latest \
-        vagrant destroy -f
-    rm -rf .vagrant
+    if [ -d "$REPO_DIR" ]; then
+        cd "$REPO_DIR" || exit
+        echo "Đang chạy vagrant destroy..."
+        docker run -it --rm \
+            -e LIBVIRT_DEFAULT_URI \
+            -v /var/run/libvirt/:/var/run/libvirt/ \
+            -v ~/.vagrant.d:/.vagrant.d \
+            -v "$(realpath "${PWD}")":"${PWD}" \
+            -w "${PWD}" \
+            --network host \
+            vagrantlibvirt/vagrant-libvirt:latest \
+            vagrant destroy -f
+        rm -rf .vagrant
+        cd ..
+    fi
 
     DOCKER_IDS=$(docker ps -a | grep "vagrant-libvirt" | awk '{print $1}')
     [ -n "$DOCKER_IDS" ] && docker rm -f $DOCKER_IDS 2>/dev/null
@@ -453,124 +360,6 @@ force_cleanup() {
     read -p "Nhấn Enter..."
 }
 
-# --- LỰA CHỌN 5: NGINX PROXY (re-setup thủ công) ---
-setup_nginx_proxy() {
-    clear
-    echo "======================================================="
-    echo "   SETUP NGINX REVERSE PROXY (thủ công)"
-    echo "======================================================="
-
-    if [ -f "$CONFIG_FILE" ]; then
-        source "$CONFIG_FILE"
-    fi
-
-    if [ -z "$PUBLIC_IP" ]; then
-        read -p "Nhập Public IP của server: " PUBLIC_IP
-        [ -z "$PUBLIC_IP" ] && echo "Cần nhập Public IP!" && read -p "Nhấn Enter..." && return
-        echo "PUBLIC_IP=$PUBLIC_IP" > "$CONFIG_FILE"
-    else
-        echo "Public IP hiện tại: $PUBLIC_IP"
-        read -p "Dùng IP này? (Enter = có, nhập IP mới để thay): " NEW_IP
-        if [ -n "$NEW_IP" ]; then
-            PUBLIC_IP="$NEW_IP"
-            echo "PUBLIC_IP=$PUBLIC_IP" > "$CONFIG_FILE"
-        fi
-    fi
-
-    REPO_ABS="$(realpath "${PWD}")"
-    NGINX_SETUP_SCRIPT="/tmp/kypo_nginx_manual_$$.sh"
-    cat > "$NGINX_SETUP_SCRIPT" << NGINX_SCRIPT
-#!/bin/bash
-set -e
-PUBLIC_IP="$PUBLIC_IP"
-CERT_DIR="/etc/nginx/ssl/kypo"
-
-apt-get update -qq && apt-get install -y nginx openssl
-
-mkdir -p "\$CERT_DIR"
-# Tạo lại cert nếu IP thay đổi
-openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-    -keyout "\$CERT_DIR/key.pem" \
-    -out "\$CERT_DIR/cert.pem" \
-    -subj "/CN=\$PUBLIC_IP" \
-    -addext "subjectAltName=IP:\$PUBLIC_IP" 2>/dev/null
-
-echo "Lấy cluster_ip từ VM..."
-CLUSTER_IP=\$(docker run --rm \
-    -e LIBVIRT_DEFAULT_URI \
-    -v /var/run/libvirt/:/var/run/libvirt/ \
-    -v ~/.vagrant.d:/.vagrant.d \
-    -v "$REPO_ABS":"$REPO_ABS" \
-    -w "$REPO_ABS" \
-    --network host \
-    vagrantlibvirt/vagrant-libvirt:latest \
-    vagrant ssh -- -t "cd /root/devops-tf-deployment/tf-openstack-base && tofu output -raw cluster_ip 2>/dev/null" 2>/dev/null | tr -d '\r\n ')
-
-[ -z "\$CLUSTER_IP" ] && CLUSTER_IP="10.1.2.10" && echo "WARN: fallback cluster_ip=10.1.2.10"
-echo "cluster_ip = \$CLUSTER_IP"
-
-cat > /etc/nginx/sites-available/kypo-proxy << EOF
-# KYPO Portal + Keycloak — HTTPS reverse proxy
-server {
-    listen 443 ssl;
-    server_name \$PUBLIC_IP;
-
-    ssl_certificate     \$CERT_DIR/cert.pem;
-    ssl_certificate_key \$CERT_DIR/key.pem;
-    ssl_protocols       TLSv1.2 TLSv1.3;
-
-    proxy_buffer_size        128k;
-    proxy_buffers            4 256k;
-    proxy_busy_buffers_size  256k;
-
-    location / {
-        proxy_pass            https://\$CLUSTER_IP;
-        proxy_ssl_verify      off;
-        proxy_ssl_server_name on;
-        proxy_ssl_name        \$PUBLIC_IP;
-        proxy_set_header      Host              \$PUBLIC_IP;
-        proxy_set_header      X-Real-IP         \\\$remote_addr;
-        proxy_set_header      X-Forwarded-For   \\\$proxy_add_x_forwarded_for;
-        proxy_set_header      X-Forwarded-Proto https;
-        proxy_read_timeout    300;
-        proxy_connect_timeout 300;
-        proxy_http_version    1.1;
-        proxy_set_header      Upgrade           \\\$http_upgrade;
-        proxy_set_header      Connection        "upgrade";
-    }
-}
-
-# OpenStack Horizon — HTTP proxy
-server {
-    listen 8080;
-    server_name \$PUBLIC_IP;
-
-    location / {
-        proxy_pass         http://10.1.2.10;
-        proxy_set_header   Host            \\\$host;
-        proxy_set_header   X-Real-IP       \\\$remote_addr;
-        proxy_set_header   X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-        proxy_read_timeout 120;
-    }
-}
-EOF
-
-ln -sf /etc/nginx/sites-available/kypo-proxy /etc/nginx/sites-enabled/kypo-proxy
-rm -f /etc/nginx/sites-enabled/default 2>/dev/null
-nginx -t && systemctl enable nginx && systemctl restart nginx
-
-echo "======================================================="
-echo "NGINX PROXY SẴN SÀNG!"
-echo "  KYPO Portal : https://\$PUBLIC_IP/"
-echo "  Horizon     : http://\$PUBLIC_IP:8080/"
-echo "======================================================="
-NGINX_SCRIPT
-    chmod +x "$NGINX_SETUP_SCRIPT"
-    sudo bash "$NGINX_SETUP_SCRIPT"
-    rm -f "$NGINX_SETUP_SCRIPT"
-    read -p "Nhấn Enter để quay lại Menu..."
-}
-
 # --- MAIN LOOP ---
 while true; do
     show_menu
@@ -579,7 +368,6 @@ while true; do
         2) read_logs ;;
         3) soft_restart ;;
         4) force_cleanup ;;
-        5) setup_nginx_proxy ;;
-        6) exit 0 ;;
+        5) exit 0 ;;
     esac
 done

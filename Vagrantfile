@@ -1,4 +1,5 @@
 # -*- mode: ruby -*-
+
 # vi: set ft=ruby :
 
 dns1 = ENV["DNS1"] || "1.1.1.1"
@@ -12,11 +13,12 @@ Vagrant.configure(2) do |config|
   config.vm.box_version = "202508.03.0"
   config.vm.hostname = "openstack"
 
-  config.vm.network :private_network, ip: "10.1.2.10"
-  config.vm.network :private_network, ip: "10.1.2.11", auto_config: false
+  config.vm.network :private_network,
+    ip: "10.1.2.10"
 
-  # 9p mount — truy cập trực tiếp thư mục host, không copy
-  config.vm.synced_folder ".", "/vagrant", type: "9p", accessmode: "mapped"
+  config.vm.network :private_network,
+    ip: "10.1.2.11",
+    auto_config: false
 
   config.vm.provider :libvirt do |libvirt|
     libvirt.cpus = cpu
@@ -25,26 +27,29 @@ Vagrant.configure(2) do |config|
     libvirt.machine_virtual_size = 250
   end
 
-  # Copy scripts và ansible config vào VM
-  config.vm.provision "file", source: "ansible.cfg", destination: "/tmp/ansible.cfg", run: "once"
-  config.vm.provision "file", source: "scripts/", destination: "/tmp/", run: "once"
+  # File provisioning - copy configuration and scripts
+  config.vm.provision "file",
+    source: "ansible.cfg",
+    destination: "/tmp/ansible.cfg",
+    run: "once"
 
-  # Kiểm tra images có thấy qua 9p không
-  config.vm.provision "shell",
-    name: "Check images mount",
-    privileged: true,
-    run: "once",
-    inline: <<-SHELL
-      echo "=== /vagrant mount check ==="
-      mountpoint /vagrant && echo "mounted OK" || echo "NOT mounted"
-      ls -lh /vagrant/http/ 2>/dev/null || echo "http/ not accessible"
-    SHELL
+  config.vm.provision "file",
+    source: "scripts/",
+    destination: "/tmp/",
+    run: "once"
+
+  # Shared folder configuration
+  config.vm.synced_folder ".", "/vagrant"
 
   # Phase 1: System Setup
   config.vm.provision "system-setup",
     type: "shell",
     name: "System Setup and Package Installation",
-    env: { "DNS1" => dns1, "DNS2" => dns2, "RAM" => ram.to_s },
+    env: {
+      "DNS1" => dns1,
+      "DNS2" => dns2,
+      "RAM" => ram.to_s
+    },
     path: "scripts/01-system-setup.sh",
     run: "once"
 
@@ -60,7 +65,10 @@ Vagrant.configure(2) do |config|
   config.vm.provision "infrastructure-deployment",
     type: "shell",
     name: "Kubernetes and Application Infrastructure",
-    env: { "DNS1" => dns1, "DNS2" => dns2, "PUBLIC_IP" => ENV["PUBLIC_IP"] || "" },
+    env: {
+      "DNS1" => dns1,
+      "DNS2" => dns2
+    },
     path: "scripts/03-infrastructure-deploy.sh",
     run: "once",
     privileged: true
@@ -72,5 +80,4 @@ Vagrant.configure(2) do |config|
     path: "scripts/04-final-setup.sh",
     run: "once",
     privileged: true
-
 end

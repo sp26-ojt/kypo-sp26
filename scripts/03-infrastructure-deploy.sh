@@ -25,10 +25,10 @@ CUSTOM_FRONTEND_IMAGE="sp26ojt/frontend-platform"
 CUSTOM_FRONTEND_TAG="v25"
 
 CUSTOM_TRAINING_IMAGE="nnm311/kypo-training-service"
-CUSTOM_TRAINING_TAG="v26"
+CUSTOM_TRAINING_TAG="v28"
 
 CUSTOM_ADAPTIVE_TRAINING_IMAGE="nnm311/kypo-adaptive-training-service"
-CUSTOM_ADAPTIVE_TRAINING_TAG="v1"
+CUSTOM_ADAPTIVE_TRAINING_TAG="v2"
 # ======================================
 
 # Setup application credentials

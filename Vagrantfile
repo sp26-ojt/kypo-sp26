@@ -21,9 +21,7 @@ Vagrant.configure(2) do |config|
     auto_config: false
 
   # Shared folder — 9p mount trực tiếp từ host
-  config.vm.synced_folder ".", "/vagrant", type: "9p", accessmode: "mapped"
-
-  config.vm.provider :libvirt do |libvirt|
+  config.vm.synced_folder ".", "/vagrant", type: "9p", accessmode: "mapped"  config.vm.provider :libvirt do |libvirt|
     libvirt.cpus = cpu
     libvirt.memory = ram
     libvirt.nested = true
@@ -40,6 +38,29 @@ Vagrant.configure(2) do |config|
     source: "scripts/",
     destination: "/tmp/",
     run: "once"
+
+  # Copy images vào đúng chỗ trong VM (9p mount có thể không thấy files lớn)
+  config.vm.provision "shell",
+    name: "Ensure images in /vagrant/http",
+    privileged: true,
+    run: "once",
+    inline: <<-SHELL
+      mkdir -p /vagrant/http
+      for img in noble-server-cloudimg-amd64.img debian-12-genericcloud-amd64.qcow2 kali.qcow2 ubuntu-noble-man.qcow2; do
+        if [ ! -f "/vagrant/http/$img" ]; then
+          echo "[images] $img not found via 9p mount, checking /mnt..."
+          # Thử mount lại 9p nếu chưa có
+          if mountpoint -q /vagrant; then
+            echo "[images] /vagrant is mounted but $img missing — host path may differ"
+          else
+            echo "[images] /vagrant not mounted"
+          fi
+        else
+          echo "[images] $img OK ($(du -sh /vagrant/http/$img | cut -f1))"
+        fi
+      done
+      ls -lh /vagrant/http/
+    SHELL
 
   # Phase 1: System Setup
   config.vm.provision "system-setup",

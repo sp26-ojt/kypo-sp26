@@ -46,19 +46,10 @@ run_build() {
     echo ""
 
     echo "--- [1/4] Syncing repository ---"
-    if [ ! -d "$REPO_DIR" ]; then
-        echo "Cloning repository..."
-        git clone "$REPO_URL"
-    else
-        echo "Repository '$REPO_DIR' đã tồn tại. Đang force overwrite..."
-        cd "$REPO_DIR" || exit
-        git fetch --all
-        git reset --hard origin/main || git reset --hard origin/master
-        git clean -fd
-        cd ..
-    fi
-
-    cd "$REPO_DIR" || { echo "Không thể vào thư mục $REPO_DIR"; exit 1; }
+    # Script đang chạy từ trong repo, chỉ cần pull bản mới nhất
+    git fetch --all
+    git reset --hard origin/master 2>/dev/null || git reset --hard origin/main
+    git clean -fd
     chmod +x scripts/*.sh 2>/dev/null
 
     # --- [2/5] Cài đặt dependencies ---
@@ -270,19 +261,18 @@ NGINX_SCRIPT
 
     # vagrant up chạy trong Docker, nginx setup chạy trực tiếp trên host sau đó
     screen -dmS kypo_build bash -c "
-$VAGRANT_CMD 2>&1 | tee ../$DEBUG_FILE
-echo '--- vagrant up done (exit='\${PIPESTATUS[0]}') ---' | tee -a ../$DEBUG_FILE
-sudo bash $NGINX_SETUP_SCRIPT 2>&1 | tee -a ../$DEBUG_FILE
+$VAGRANT_CMD 2>&1 | tee $DEBUG_FILE
+echo '--- vagrant up done (exit='\${PIPESTATUS[0]}') ---' | tee -a $DEBUG_FILE
+sudo bash $NGINX_SETUP_SCRIPT 2>&1 | tee -a $DEBUG_FILE
 rm -f $NGINX_SETUP_SCRIPT
 "
 
     echo "-------------------------------------------------------"
     echo "BUILD ĐÃ KHỞI ĐỘNG!"
-    echo "  Theo dõi log: tail -f $PWD/../$DEBUG_FILE"
+    echo "  Theo dõi log: tail -f $PWD/$DEBUG_FILE"
     echo "  Live terminal: screen -r kypo_build"
     echo "  Sau khi xong: https://$PUBLIC_IP/"
     echo "-------------------------------------------------------"
-    cd ..
     read -p "Nhấn Enter để về Menu..."
 }
 

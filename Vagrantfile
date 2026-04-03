@@ -20,7 +20,7 @@ Vagrant.configure(2) do |config|
     ip: "10.1.2.11",
     auto_config: false
 
-  # Shared folder — dùng 9p để mount trực tiếp không cần copy
+  # Shared folder — 9p mount trực tiếp từ host
   config.vm.synced_folder ".", "/vagrant", type: "9p", accessmode: "mapped"
 
   config.vm.provider :libvirt do |libvirt|

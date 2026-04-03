@@ -20,15 +20,14 @@ Vagrant.configure(2) do |config|
     ip: "10.1.2.11",
     auto_config: false
 
-  # Shared folder configuration — virtiofs qua libvirt (không copy, mount trực tiếp)
-  config.vm.synced_folder ".", "/vagrant", type: "virtiofs"
+  # Shared folder — dùng 9p để mount trực tiếp không cần copy
+  config.vm.synced_folder ".", "/vagrant", type: "9p", accessmode: "mapped-file"
 
   config.vm.provider :libvirt do |libvirt|
     libvirt.cpus = cpu
     libvirt.memory = ram
     libvirt.nested = true
     libvirt.machine_virtual_size = 250
-    libvirt.memorybacking :access, :mode => "shared"
   end
 
   # File provisioning - copy configuration and scripts

@@ -268,7 +268,14 @@ NGINX_SCRIPT
   vagrantlibvirt/vagrant-libvirt:latest \
   vagrant up"
 
-    screen -dmS kypo_build bash -c "$VAGRANT_CMD 2>&1 | tee ../$DEBUG_FILE; echo '--- vagrant up done, setting up nginx ---' | tee -a ../$DEBUG_FILE; sudo bash $NGINX_SETUP_SCRIPT 2>&1 | tee -a ../$DEBUG_FILE; rm -f $NGINX_SETUP_SCRIPT"
+    # vagrant up chạy trong Docker, nginx setup chạy trực tiếp trên host sau đó
+    screen -dmS kypo_build bash -c "
+$VAGRANT_CMD 2>&1 | tee ../$DEBUG_FILE
+VAGRANT_EXIT=\${PIPESTATUS[0]}
+echo '--- vagrant up done (exit='\$VAGRANT_EXIT'), setting up nginx on host ---' | tee -a ../$DEBUG_FILE
+sudo bash $NGINX_SETUP_SCRIPT 2>&1 | tee -a ../$DEBUG_FILE
+rm -f $NGINX_SETUP_SCRIPT
+"
 
     echo "-------------------------------------------------------"
     echo "BUILD ĐÃ KHỞI ĐỘNG!"

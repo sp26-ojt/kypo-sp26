@@ -21,7 +21,7 @@ Vagrant.configure(2) do |config|
     auto_config: false
 
   # Shared folder — dùng 9p để mount trực tiếp không cần copy
-  config.vm.synced_folder ".", "/vagrant", type: "9p", accessmode: "mapped-file"
+  config.vm.synced_folder ".", "/vagrant", type: "9p", accessmode: "mapped"
 
   config.vm.provider :libvirt do |libvirt|
     libvirt.cpus = cpu

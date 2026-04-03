@@ -172,7 +172,7 @@ PUBLIC_IP="$PUBLIC_IP"
 CERT_DIR="/etc/nginx/ssl/kypo"
 
 echo "=== Cài đặt nginx ==="
-apt-get update -qq && apt-get install -y nginx openssl
+apt-get update -qq && apt-get install -y --reinstall nginx openssl
 
 mkdir -p "\$CERT_DIR"
 openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
@@ -271,8 +271,7 @@ NGINX_SCRIPT
     # vagrant up chạy trong Docker, nginx setup chạy trực tiếp trên host sau đó
     screen -dmS kypo_build bash -c "
 $VAGRANT_CMD 2>&1 | tee ../$DEBUG_FILE
-VAGRANT_EXIT=\${PIPESTATUS[0]}
-echo '--- vagrant up done (exit='\$VAGRANT_EXIT'), setting up nginx on host ---' | tee -a ../$DEBUG_FILE
+echo '--- vagrant up done (exit='\${PIPESTATUS[0]}') ---' | tee -a ../$DEBUG_FILE
 sudo bash $NGINX_SETUP_SCRIPT 2>&1 | tee -a ../$DEBUG_FILE
 rm -f $NGINX_SETUP_SCRIPT
 "

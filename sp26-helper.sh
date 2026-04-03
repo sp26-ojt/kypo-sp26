@@ -34,14 +34,14 @@ run_build() {
     echo "  (Keycloak redirect URI, TLS cert đều config theo IP này)"
     echo "-------------------------------------------------------"
     while true; do
-        read -p "Public IP: " PUBLIC_IP
-        if [[ "$PUBLIC_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        read -r -p "Public IP: " PUBLIC_IP < /dev/tty
+        PUBLIC_IP="$(echo "$PUBLIC_IP" | tr -d '[:space:]')"
+        if [ -n "$PUBLIC_IP" ]; then
             echo "PUBLIC_IP=$PUBLIC_IP" > "$CONFIG_FILE"
             echo "Đã lưu Public IP: $PUBLIC_IP"
             break
-        else
-            echo "IP không hợp lệ, vui lòng nhập lại."
         fi
+        echo "Vui lòng nhập IP, không được để trống."
     done
     echo ""
 

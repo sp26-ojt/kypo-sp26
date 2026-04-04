@@ -1,17 +1,16 @@
 #!/bin/bash
 
 # Nginx Reverse Proxy Setup - Forward traffic to KYPO head services
-# Strategy: bind nginx on both public IP and 10.1.2.161 (via IP alias)
-# so Keycloak redirects (which use 10.1.2.161) are also caught by nginx.
 
-source /tmp/scripts/utils.sh
-setup_error_handling
-
-log "Starting Nginx reverse proxy setup..."
+set -euo pipefail
 
 HEAD_HOST="${HEAD_HOST:-10.1.2.161}"
 PUBLIC_IP="${PUBLIC_IP:-42.115.38.85}"
 VM_IFACE="${VM_IFACE:-eth1}"
+
+log()         { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"; }
+log_success() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $1"; }
+log_error()   { echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2; }
 
 install_nginx() {
     log "Installing Nginx..."
@@ -47,7 +46,7 @@ EOF
 generate_self_signed_cert() {
     log "Generating self-signed SSL certificate (SAN: $PUBLIC_IP + $HEAD_HOST)..."
 
-    safe_mkdir /etc/nginx/ssl
+    mkdir -p /etc/nginx/ssl
 
     cat > /tmp/kypo-openssl.cnf << EOF
 [req]
@@ -174,7 +173,6 @@ rollback() {
     rm -f /etc/nginx/sites-available/kypo-proxy
     rm -rf /etc/nginx/ssl
 
-    # Remove IP alias
     if ip addr show "$VM_IFACE" | grep -q "$HEAD_HOST"; then
         ip addr del "$HEAD_HOST/24" dev "$VM_IFACE"
         log_success "IP alias $HEAD_HOST removed"
@@ -200,7 +198,6 @@ print_info() {
 }
 
 main() {
-    # Support rollback mode: bash 05-nginx-proxy.sh rollback
     if [ "${1:-}" = "rollback" ]; then
         rollback
         exit 0

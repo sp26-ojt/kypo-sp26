@@ -80,16 +80,4 @@ Vagrant.configure(2) do |config|
     path: "scripts/04-final-setup.sh",
     run: "once",
     privileged: true
-
-  # Phase 5: Nginx Reverse Proxy
-  config.vm.provision "nginx-proxy",
-    type: "shell",
-    name: "Nginx Reverse Proxy to KYPO Head Services",
-    env: {
-      "HEAD_HOST" => "10.1.2.161",
-      "PUBLIC_IP" => "42.115.38.85"
-    },
-    path: "scripts/05-nginx-proxy.sh",
-    run: "once",
-    privileged: true
 end

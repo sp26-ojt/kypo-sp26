@@ -31,6 +31,25 @@ CUSTOM_ADAPTIVE_TRAINING_IMAGE="nnm311/kypo-adaptive-training-service"
 CUSTOM_ADAPTIVE_TRAINING_TAG="v3"
 # ======================================
 
+# Validate an IP address (IPv4 or IPv6)
+is_valid_ip() {
+    local ip="$1"
+    # IPv4
+    if [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+        local IFS='.'
+        read -ra octets <<< "$ip"
+        for octet in "${octets[@]}"; do
+            [[ "$octet" -le 255 ]] || return 1
+        done
+        return 0
+    fi
+    # IPv6 (basic check)
+    if [[ "$ip" =~ ^[0-9a-fA-F:]+$ ]] && [[ "$ip" == *:* ]]; then
+        return 0
+    fi
+    return 1
+}
+
 # Setup application credentials
 setup_application_credentials() {
     log "Setting up OpenStack application credentials..."
@@ -219,10 +238,19 @@ setup_head_services_variables() {
         return 1
     }
 
-    head_host=$(tofu output -raw cluster_ip) || {
-        log_error "Failed to get head_host output"
-        return 1
-    }
+    # Resolve head_host: use KYPO_PUBLIC_IP if set and valid, else fallback to cluster_ip
+    if [[ -n "$KYPO_PUBLIC_IP" ]]; then
+        if is_valid_ip "$KYPO_PUBLIC_IP"; then
+            head_host="$KYPO_PUBLIC_IP"
+            log "Using KYPO_PUBLIC_IP as head_host: $head_host"
+        else
+            log_warning "KYPO_PUBLIC_IP='$KYPO_PUBLIC_IP' is not a valid IP address, falling back to cluster_ip"
+            head_host="$cluster_ip"
+        fi
+    else
+        head_host="$cluster_ip"
+        log "KYPO_PUBLIC_IP not set, using cluster_ip as head_host: $head_host"
+    fi
 
     proxy_host=$(tofu output -raw proxy_host) || {
         log_error "Failed to get proxy_host output"
@@ -265,6 +293,7 @@ setup_head_services_variables() {
     export TF_VAR_users="{\"crczp-admin\"={iss=\"https://$head_host/keycloak/realms/CRCZP\",keycloakUsername=\"crczp-admin\",keycloakPassword=\"password\",email=\"crczp-admin@example.com\",fullName=\"Demo Admin\",givenName=\"Demo\",familyName=\"Admin\",admin=true}}"
 
     log "Head services variables configured for host: $head_host"
+    log "TF_VAR_head_host=$TF_VAR_head_host"
     log_success "Head services variables setup completed"
 }
 

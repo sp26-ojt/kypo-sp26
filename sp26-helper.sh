@@ -5,16 +5,6 @@
 # =================================================================
 
 REPO_URL="https://github.com/sp26-ojt/kypo-sp26.git"
-
-# Nếu repo private, set GIT_TOKEN trước khi chạy:
-# export GIT_TOKEN="ghp_xxxx"
-_get_repo_url() {
-    if [ -n "$GIT_TOKEN" ]; then
-        echo "https://${GIT_TOKEN}@github.com/sp26-ojt/kypo-sp26.git"
-    else
-        echo "$REPO_URL"
-    fi
-}
 REPO_DIR="kypo-sp26"
 DEBUG_FILE="debug.txt"
 
@@ -38,11 +28,10 @@ run_build() {
     echo "--- [1/4] Syncing repository ---"
     if [ ! -d "$REPO_DIR" ]; then
         echo "Cloning repository..."
-        git clone "$(_get_repo_url)"
+        git clone "$REPO_URL"
     else
         echo "Repository '$REPO_DIR' đã tồn tại. Đang force overwrite..."
         cd "$REPO_DIR" || exit
-        git remote set-url origin "$(_get_repo_url)"
         git fetch --all
         git reset --hard origin/main || git reset --hard origin/master
         git clean -fd
@@ -143,20 +132,8 @@ run_build() {
         echo "    - $(echo "$item" | cut -d'|' -f1)"
     done
     echo "-------------------------------------------------------"
-    echo "KYPO PUBLIC IP (tùy chọn):"
-    echo "  Nếu cloud VM của bạn có public IP, nhập vào đây để"
-    echo "  truy cập KYPO trực tiếp mà không cần shuttle/bastion."
-    echo "  Để trống nếu muốn dùng IP nội bộ (cluster_ip)."
-    echo "-------------------------------------------------------"
-    read -p "Nhập KYPO_PUBLIC_IP (hoặc Enter để bỏ qua): " INPUT_PUBLIC_IP
-
-    KYPO_PUBLIC_IP_ENV=""
-    if [ -n "$INPUT_PUBLIC_IP" ]; then
-        KYPO_PUBLIC_IP_ENV="-e KYPO_PUBLIC_IP=$INPUT_PUBLIC_IP"
-        echo "  -> Sẽ dùng public IP: $INPUT_PUBLIC_IP"
-    else
-        echo "  -> Sẽ dùng cluster_ip từ Terraform output."
-    fi
+    echo "Lưu ý: head_host sẽ được lấy tự động từ OpenStack"
+    echo "       sau khi Terraform deploy xong (cluster_ip output)."
     echo "-------------------------------------------------------"
     read -p "Nhấn Enter để bắt đầu BUILD..."
 
@@ -166,7 +143,6 @@ run_build() {
 
     VAGRANT_CMD="docker run -it --rm \
   -e LIBVIRT_DEFAULT_URI \
-  $KYPO_PUBLIC_IP_ENV \
   -v /var/run/libvirt/:/var/run/libvirt/ \
   -v ~/.vagrant.d:/.vagrant.d \
   -v \$(realpath \"\${PWD}\"):\${PWD} \

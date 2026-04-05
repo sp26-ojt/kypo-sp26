@@ -26,13 +26,9 @@ display_deployment_info() {
         return 1
     }
 
-    if [[ -n "$KYPO_PUBLIC_IP" ]]; then
-        head_host="$KYPO_PUBLIC_IP"
-    else
-        if ! head_host=$(tofu output -raw cluster_ip 2>/dev/null); then
-            log_warning "Could not retrieve head_host from Terraform output"
-            head_host="<unavailable>"
-        fi
+    if ! head_host=$(tofu output -raw cluster_ip 2>/dev/null); then
+        log_warning "Could not retrieve head_host from Terraform output"
+        head_host="<unavailable>"
     fi
 
     cd "$HEAD_TF_PATH" || {

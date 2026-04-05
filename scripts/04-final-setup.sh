@@ -47,6 +47,10 @@ display_deployment_info() {
         return 1
     }
 
+    local grafana_user prometheus_user
+    grafana_user="admin"
+    prometheus_user="admin"
+
     if ! monitoring_password=$(tofu output -raw monitoring_admin_password 2>/dev/null); then
         log_warning "Could not retrieve monitoring password from Terraform output"
         monitoring_password="<unavailable>"
@@ -73,7 +77,14 @@ display_deployment_info() {
     echo "   Password: password"
     echo ""
     echo " Monitoring (Grafana):"
-    echo "   Admin Password: $monitoring_password"
+    echo "   URL:      https://$head_host/grafana/"
+    echo "   Username: $grafana_user"
+    echo "   Password: $monitoring_password"
+    echo ""
+    echo " Monitoring (Prometheus):"
+    echo "   URL:      https://$head_host/prometheus/"
+    echo "   Username: $prometheus_user"
+    echo "   Password: $monitoring_password"
     echo ""
     echo " Keycloak Admin:"
     echo "   Admin Password: $keycloak_password"

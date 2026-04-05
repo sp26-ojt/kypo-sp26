@@ -18,9 +18,10 @@ show_menu() {
     echo "2. XEM LOG HỆ THỐNG (SSH vào VM & Chọn Log)"
     echo "3. RESTART MỀM (Khởi động lại dịch vụ khi bị nghẽn)"
     echo "4. DỌN DẸP & RESET (Xóa tiến độ cũ để làm lại)"
-    echo "5. THOÁT"
+    echo "5. CÀI PROXY CÔNG KHAI (Cài Nginx trên Public Host)"
+    echo "6. THOÁT"
     echo "-------------------------------------------------------"
-    read -p "Lựa chọn của bạn (1-5): " main_opt
+    read -p "Lựa chọn của bạn (1-6): " main_opt
 }
 
 # --- LỰA CHỌN 1: BUILD ---
@@ -120,12 +121,28 @@ run_build() {
         esac
     done
 
+    # --- Nhập Public IP cho build ---
+    echo "-------------------------------------------------------"
+    echo "KYPO_PUBLIC_HOST: IP công khai của server này."
+    echo "Dùng để cấu hình Keycloak issuer và các service URL."
+    local default_build_ip="42.115.38.85"
+    read -p "Nhập KYPO_PUBLIC_HOST [$default_build_ip]: " input_build_ip
+    local KYPO_PUBLIC_HOST="${input_build_ip:-$default_build_ip}"
+
+    if ! echo "$KYPO_PUBLIC_HOST" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+        echo "Lỗi: '$KYPO_PUBLIC_HOST' không phải địa chỉ IP hợp lệ."
+        read -p "Nhấn Enter để quay lại..."
+        cd ..
+        return
+    fi
+
     # --- Xác nhận cấu hình trước khi build ---
     echo "--- Xác nhận cấu hình ---"
     echo ""
     echo "======================================================="
     echo "XÁC NHẬN CẤU HÌNH"
     echo "-------------------------------------------------------"
+    echo "KYPO_PUBLIC_HOST: $KYPO_PUBLIC_HOST"
     echo "Images dir: $REPO_DIR/$HTTP_DIR/"
     echo "  Tên file cần có:"
     for item in "${IMAGES[@]}"; do
@@ -143,6 +160,7 @@ run_build() {
 
     VAGRANT_CMD="docker run -it --rm \
   -e LIBVIRT_DEFAULT_URI \
+  -e KYPO_PUBLIC_HOST=${KYPO_PUBLIC_HOST} \
   -v /var/run/libvirt/:/var/run/libvirt/ \
   -v ~/.vagrant.d:/.vagrant.d \
   -v \$(realpath \"\${PWD}\"):\${PWD} \
@@ -360,6 +378,61 @@ force_cleanup() {
     read -p "Nhấn Enter..."
 }
 
+# --- LỰA CHỌN 5: CÀI PROXY CÔNG KHAI ---
+setup_public_proxy() {
+    clear
+    echo "======================================================="
+    echo "   CÀI NGINX REVERSE PROXY TRÊN PUBLIC HOST"
+    echo "======================================================="
+    echo "Script này sẽ cài Nginx và cấu hình forward traffic"
+    echo "từ Public Host về KYPO_Node (10.1.2.157)."
+    echo "-------------------------------------------------------"
+
+    # Nhập public IP
+    local default_ip="42.115.38.85"
+    read -p "Nhập Public IP của server này [$default_ip]: " input_ip
+    local public_ip="${input_ip:-$default_ip}"
+
+    # Validate định dạng IP cơ bản
+    if ! echo "$public_ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+        echo "Lỗi: '$public_ip' không phải địa chỉ IP hợp lệ."
+        read -p "Nhấn Enter để quay lại..."
+        return
+    fi
+
+    echo ""
+    echo "-------------------------------------------------------"
+    echo "Cấu hình sẽ dùng:"
+    echo "  KYPO_PUBLIC_IP : $public_ip"
+    echo "  KYPO_NODE_IP   : 10.1.2.157"
+    echo "-------------------------------------------------------"
+    read -p "Xác nhận cài đặt? (y/N): " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo "Đã hủy."
+        read -p "Nhấn Enter để quay lại..."
+        return
+    fi
+
+    # Xác định đường dẫn script
+    local script_path
+    if [ -f "$REPO_DIR/scripts/05-public-proxy-setup.sh" ]; then
+        script_path="$REPO_DIR/scripts/05-public-proxy-setup.sh"
+    elif [ -f "scripts/05-public-proxy-setup.sh" ]; then
+        script_path="scripts/05-public-proxy-setup.sh"
+    else
+        echo "Lỗi: Không tìm thấy scripts/05-public-proxy-setup.sh"
+        read -p "Nhấn Enter để quay lại..."
+        return
+    fi
+
+    echo ""
+    echo "--- Đang chạy proxy setup ---"
+    KYPO_PUBLIC_IP="$public_ip" sudo -E bash "$script_path"
+
+    echo ""
+    read -p "Nhấn Enter để về Menu..."
+}
+
 # --- MAIN LOOP ---
 while true; do
     show_menu
@@ -368,6 +441,7 @@ while true; do
         2) read_logs ;;
         3) soft_restart ;;
         4) force_cleanup ;;
-        5) exit 0 ;;
+        5) setup_public_proxy ;;
+        6) exit 0 ;;
     esac
 done

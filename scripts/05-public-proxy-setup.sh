@@ -139,8 +139,22 @@ server {
 }
 EOF
 
-    # Append stream block for HTTPS passthrough to the nginx.conf level
-    # The stream block must live outside the http context — use a separate include file
+    # HTTPS passthrough via stream module
+    # On Ubuntu, ngx_stream_module must be explicitly loaded
+    local stream_module_conf="/etc/nginx/modules-enabled/50-mod-stream.conf"
+    local stream_module_path="/usr/lib/nginx/modules/ngx_stream_module.so"
+
+    if [ -f "$stream_module_path" ]; then
+        if [ ! -f "$stream_module_conf" ]; then
+            echo "load_module ${stream_module_path};" > "$stream_module_conf"
+            log "Loaded ngx_stream_module"
+        fi
+    else
+        # Try installing libnginx-mod-stream
+        log "Installing nginx stream module..."
+        apt-get install -y libnginx-mod-stream 2>/dev/null || true
+    fi
+
     local stream_conf="/etc/nginx/stream.d/kypo-https-passthrough.conf"
     mkdir -p /etc/nginx/stream.d
 
@@ -152,9 +166,8 @@ server {
 }
 EOF
 
-    # Ensure nginx.conf includes the stream block
+    # Ensure nginx.conf includes the stream block (outside http context)
     if ! grep -q "stream.d" /etc/nginx/nginx.conf 2>/dev/null; then
-        # Append stream include at end of nginx.conf (outside http block)
         cat >> /etc/nginx/nginx.conf << 'STREAMEOF'
 
 # KYPO HTTPS passthrough (stream module)

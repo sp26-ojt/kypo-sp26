@@ -6,6 +6,8 @@ dns1 = ENV["DNS1"] || "1.1.1.1"
 dns2 = ENV["DNS2"] || "1.0.0.1"
 cpu = ENV["CPU"] || 8
 ram = ENV["RAM"] || 45056
+kypo_public_host = ENV["KYPO_PUBLIC_HOST"] || ""
+kypo_rerun_head_only = ENV["KYPO_RERUN_HEAD_ONLY"] || ""
 
 Vagrant.configure(2) do |config|
 
@@ -67,7 +69,9 @@ Vagrant.configure(2) do |config|
     name: "Kubernetes and Application Infrastructure",
     env: {
       "DNS1" => dns1,
-      "DNS2" => dns2
+      "DNS2" => dns2,
+      "KYPO_PUBLIC_HOST" => kypo_public_host,
+      "KYPO_RERUN_HEAD_ONLY" => kypo_rerun_head_only
     },
     path: "scripts/03-infrastructure-deploy.sh",
     run: "once",
@@ -77,6 +81,9 @@ Vagrant.configure(2) do |config|
   config.vm.provision "final-setup",
     type: "shell",
     name: "Final Configuration and Information Display",
+    env: {
+      "KYPO_PUBLIC_HOST" => kypo_public_host
+    },
     path: "scripts/04-final-setup.sh",
     run: "once",
     privileged: true

@@ -31,6 +31,17 @@ display_deployment_info() {
         head_host="<unavailable>"
     fi
 
+    # Priority chain: KYPO_PUBLIC_HOST → KYPO_PUBLIC_IP → cluster_ip (tofu output)
+    if [[ -n "${KYPO_PUBLIC_HOST:-}" ]]; then
+        head_host="${KYPO_PUBLIC_HOST}"
+        log "Using KYPO_PUBLIC_HOST as display URL: ${head_host}"
+    elif [[ -n "${KYPO_PUBLIC_IP:-}" ]]; then
+        head_host="${KYPO_PUBLIC_IP}"
+        log "Using KYPO_PUBLIC_IP as display URL: ${head_host}"
+    else
+        log "Using cluster_ip as display URL: ${head_host}"
+    fi
+
     cd "$HEAD_TF_PATH" || {
         log_error "Failed to change to head services directory"
         return 1

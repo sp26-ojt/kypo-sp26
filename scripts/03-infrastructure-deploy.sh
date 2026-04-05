@@ -31,6 +31,48 @@ CUSTOM_ADAPTIVE_TRAINING_IMAGE="nnm311/kypo-adaptive-training-service"
 CUSTOM_ADAPTIVE_TRAINING_TAG="v3"
 # ======================================
 
+# ─────────────────────────────────────────────
+# Helper: IP and hostname validation
+# ─────────────────────────────────────────────
+
+# Validate an IPv4 address (each octet 0-255) or basic IPv6 (contains ':')
+is_valid_ip() {
+    local ip="$1"
+    [[ -z "$ip" ]] && return 1
+
+    # Basic IPv6: must contain at least one colon
+    if [[ "$ip" == *:* ]]; then
+        return 0
+    fi
+
+    # IPv4: must match x.x.x.x with each octet 0-255
+    if [[ "$ip" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+        local o1="${BASH_REMATCH[1]}" o2="${BASH_REMATCH[2]}" \
+              o3="${BASH_REMATCH[3]}" o4="${BASH_REMATCH[4]}"
+        if (( o1 <= 255 && o2 <= 255 && o3 <= 255 && o4 <= 255 )); then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# Validate a hostname (RFC 1123) or IP address
+is_valid_host() {
+    local host="$1"
+    [[ -z "$host" ]] && return 1
+
+    # Accept valid IPs first
+    is_valid_ip "$host" && return 0
+
+    # Validate hostname per RFC 1123
+    if [[ "$host" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
 # Setup application credentials
 setup_application_credentials() {
     log "Setting up OpenStack application credentials..."
@@ -219,10 +261,30 @@ setup_head_services_variables() {
         return 1
     }
 
-    head_host=$(tofu output -raw cluster_ip) || {
-        log_error "Failed to get head_host output"
-        return 1
-    }
+    # Resolve head_host via priority chain:
+    #   KYPO_PUBLIC_HOST (valid host/IP) → KYPO_PUBLIC_IP (valid IP) → cluster_ip
+    if [[ -n "${KYPO_PUBLIC_HOST:-}" ]]; then
+        if is_valid_host "${KYPO_PUBLIC_HOST}"; then
+            head_host="${KYPO_PUBLIC_HOST}"
+            log "head_host resolved from KYPO_PUBLIC_HOST: ${head_host}"
+        else
+            log_warning "KYPO_PUBLIC_HOST='${KYPO_PUBLIC_HOST}' is not a valid hostname or IP — falling back"
+        fi
+    fi
+
+    if [[ -z "${head_host:-}" ]] && [[ -n "${KYPO_PUBLIC_IP:-}" ]]; then
+        if is_valid_ip "${KYPO_PUBLIC_IP}"; then
+            head_host="${KYPO_PUBLIC_IP}"
+            log "head_host resolved from KYPO_PUBLIC_IP: ${head_host}"
+        else
+            log_warning "KYPO_PUBLIC_IP='${KYPO_PUBLIC_IP}' is not a valid IP — falling back"
+        fi
+    fi
+
+    if [[ -z "${head_host:-}" ]]; then
+        head_host="${cluster_ip}"
+        log "head_host resolved from tofu output cluster_ip: ${head_host}"
+    fi
 
     proxy_host=$(tofu output -raw proxy_host) || {
         log_error "Failed to get proxy_host output"
@@ -390,7 +452,21 @@ main() {
         exit 1
     fi
 
-    # Execute deployment steps
+    # Head-only rerun mode: skip base infra, only redeploy head services
+    if [[ "${KYPO_RERUN_HEAD_ONLY:-}" == "true" ]]; then
+        log "Running in head-only rerun mode (KYPO_RERUN_HEAD_ONLY=true)"
+        log "Skipping: deploy_base_infrastructure, setup_kubernetes_config, wait_for_kubernetes"
+
+        setup_application_credentials
+        setup_git_repository
+        setup_head_services_variables
+        deploy_head_services
+
+        log_success "=== Infrastructure Deployment Phase Completed (head-only rerun) ==="
+        return 0
+    fi
+
+    # Full pipeline
     setup_application_credentials
     setup_git_repository
     deploy_base_infrastructure

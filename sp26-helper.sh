@@ -216,13 +216,14 @@ KYPO_PUBLIC_IP="$PUBLIC_HOST" KYPO_NODE_IP="$CLUSTER_IP" sudo -E bash "$SCRIPT_P
 log "=== [3/4] Patch adaptive-training configmap ==="
 docker run --rm \
     -e LIBVIRT_DEFAULT_URI \
+    -e KYPO_PATCH_HOST="$PUBLIC_HOST" \
     -v /var/run/libvirt/:/var/run/libvirt/ \
     -v ~/.vagrant.d:/.vagrant.d \
     -v "$REPO_ABS":"$REPO_ABS" \
     -w "$REPO_ABS" \
     --network host \
     vagrantlibvirt/vagrant-libvirt:latest \
-    vagrant ssh -- "sudo -i bash -c 'kubectl get configmap adaptive-training-service-configmap -n crczp -o json | PUBLIC_HOST='"$PUBLIC_HOST"' python3 /vagrant/scripts/patch-adaptive-training.py | kubectl apply -f - && kubectl rollout restart deployment/adaptive-training-service -n crczp'" 2>&1 | tee -a "$LOG" || log "WARNING: patch adaptive-training thất bại, tiếp tục..."
+    vagrant ssh -- 'sudo -i bash -c "kubectl get configmap adaptive-training-service-configmap -n crczp -o json | PUBLIC_HOST=$KYPO_PATCH_HOST python3 /vagrant/scripts/patch-adaptive-training.py | kubectl apply -f - && kubectl rollout restart deployment/adaptive-training-service -n crczp"' 2>&1 | tee -a "$LOG" || log "WARNING: patch adaptive-training thất bại, tiếp tục..."
 
 log "=== [4/4] Rerun head services (monitoring) ==="
 docker run --rm \

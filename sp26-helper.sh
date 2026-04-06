@@ -178,6 +178,7 @@ set -e
 REPO_ABS="'"$REPO_ABS"'"
 PUBLIC_HOST="'"$PUBLIC_HOST"'"
 SCRIPT_PATH="'"$SCRIPT_PATH"'"
+LOG="'"$LOG"'"
 log() { echo "[$(date "+%Y-%m-%d %H:%M:%S")] $1" | tee -a "$LOG"; }
 
 log "=== [1/3] vagrant up ==="
@@ -229,6 +230,8 @@ log "=== HOÀN TẤT! KYPO sẵn sàng tại https://$PUBLIC_HOST/ ==="
 '
 
     cd ..
+    # Xóa log cũ, bắt đầu fresh
+    > "$DEBUG_FILE"
     echo "-------------------------------------------------------"
     echo "BUILD đang chạy nền. Theo dõi log bên dưới."
     echo "Nhấn Ctrl+C để thoát log (build vẫn tiếp tục chạy)."

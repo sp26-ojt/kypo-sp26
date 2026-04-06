@@ -224,7 +224,7 @@ docker run --rm \
     -w "$REPO_ABS" \
     --network host \
     vagrantlibvirt/vagrant-libvirt:latest \
-    vagrant provision --provision-with infrastructure-deploy 2>&1 | tee -a "$LOG"
+    vagrant provision --provision-with infrastructure-deployment 2>&1 | tee -a "$LOG"
 
 log "=== HOÀN TẤT! KYPO sẵn sàng tại https://$PUBLIC_HOST/ ==="
 '

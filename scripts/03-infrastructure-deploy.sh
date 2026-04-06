@@ -28,7 +28,7 @@ CUSTOM_TRAINING_IMAGE="nnm311/kypo-training-service"
 CUSTOM_TRAINING_TAG="v29"
 
 CUSTOM_ADAPTIVE_TRAINING_IMAGE="nnm311/kypo-adaptive-training-service"
-CUSTOM_ADAPTIVE_TRAINING_TAG="v3"
+CUSTOM_ADAPTIVE_TRAINING_TAG="v7"
 # ======================================
 
 # ─────────────────────────────────────────────

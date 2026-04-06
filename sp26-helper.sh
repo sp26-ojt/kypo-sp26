@@ -213,7 +213,39 @@ log "cluster_ip: $CLUSTER_IP"
 log "=== [2/3] Cài Nginx proxy ==="
 KYPO_PUBLIC_IP="$PUBLIC_HOST" KYPO_NODE_IP="$CLUSTER_IP" sudo -E bash "$SCRIPT_PATH" 2>&1 | tee -a "$LOG"
 
-log "=== [3/3] Rerun head services (monitoring) ==="
+log "=== [3/4] Patch adaptive-training configmap ==="
+docker run --rm \
+    -e LIBVIRT_DEFAULT_URI \
+    -v /var/run/libvirt/:/var/run/libvirt/ \
+    -v ~/.vagrant.d:/.vagrant.d \
+    -v "$REPO_ABS":"$REPO_ABS" \
+    -w "$REPO_ABS" \
+    --network host \
+    vagrantlibvirt/vagrant-libvirt:latest \
+    vagrant ssh -- "sudo -i kubectl get configmap adaptive-training-service-configmap -n crczp -o json | \
+        sudo -i python3 -c \"
+import json, sys
+cm = json.load(sys.stdin)
+data = cm.get('data', {})
+for key in data:
+    if 'elasticsearch.port=9200' in data[key]:
+        lines = data[key].splitlines()
+        insert_at = next(i+1 for i,l in enumerate(lines) if 'elasticsearch.port=9200' in l)
+        extra = [
+            'server.base-url=https://\$PUBLIC_HOST/adaptive-training/api/v1',
+            'frontend.url=https://\$PUBLIC_HOST',
+            'spring.flyway.repair-on-migrate=true'
+        ]
+        for j, line in enumerate(extra):
+            if line.split('=')[0] not in data[key]:
+                lines.insert(insert_at + j, line)
+        data[key] = '\n'.join(lines)
+cm['data'] = data
+print(json.dumps(cm))
+\" | sudo -i kubectl apply -f - && \
+        sudo -i kubectl rollout restart deployment/adaptive-training-service -n crczp" 2>&1 | tee -a "$LOG"
+
+log "=== [4/4] Rerun head services (monitoring) ==="
 docker run --rm \
     -e LIBVIRT_DEFAULT_URI \
     -e KYPO_PUBLIC_HOST="$PUBLIC_HOST" \

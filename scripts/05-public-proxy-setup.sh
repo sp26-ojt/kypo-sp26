@@ -17,8 +17,14 @@ else
 fi
 
 # Configuration — override via environment variables
-KYPO_NODE_IP="${KYPO_NODE_IP:-10.1.2.157}"
-KYPO_PUBLIC_IP="${KYPO_PUBLIC_IP:-42.115.38.85}"
+KYPO_NODE_IP="${KYPO_NODE_IP:-}"
+KYPO_PUBLIC_IP="${KYPO_PUBLIC_IP:-}"
+
+if [ -z "$KYPO_NODE_IP" ] || [ -z "$KYPO_PUBLIC_IP" ]; then
+    log_error "KYPO_NODE_IP và KYPO_PUBLIC_IP phải được truyền vào qua environment."
+    log_error "Ví dụ: KYPO_NODE_IP=x.x.x.x KYPO_PUBLIC_IP=y.y.y.y bash $0"
+    exit 1
+fi
 
 NGINX_CONF_DIR="/etc/nginx/sites-available"
 NGINX_ENABLED_DIR="/etc/nginx/sites-enabled"
@@ -33,29 +39,19 @@ NGINX_CONF_BACKUP="$NGINX_CONF_DIR/kypo-proxy.bak"
 check_connectivity() {
     log "Checking TCP connectivity to KYPO_Node (${KYPO_NODE_IP})..."
 
-    local failed=0
-
     if nc -zw3 "${KYPO_NODE_IP}" 80 2>/dev/null; then
         log "  ✓ ${KYPO_NODE_IP}:80 is reachable"
     else
-        log_error "  ✗ Cannot reach ${KYPO_NODE_IP}:80 — port 80 is not reachable"
-        failed=1
+        log_warning "  ✗ ${KYPO_NODE_IP}:80 not reachable — Traefik có thể chưa bind port này"
     fi
 
     if nc -zw3 "${KYPO_NODE_IP}" 443 2>/dev/null; then
         log "  ✓ ${KYPO_NODE_IP}:443 is reachable"
     else
-        log_error "  ✗ Cannot reach ${KYPO_NODE_IP}:443 — port 443 is not reachable"
-        failed=1
+        log_warning "  ✗ ${KYPO_NODE_IP}:443 not reachable — Traefik có thể chưa bind port này"
     fi
 
-    if [ "$failed" -eq 1 ]; then
-        log_error "Connectivity check failed. Ensure KYPO_Node is running and ports 80/443 are open."
-        log_error "Hint: Check firewall rules and that Traefik is running on ${KYPO_NODE_IP}."
-        exit 1
-    fi
-
-    log_success "Connectivity to KYPO_Node confirmed on ports 80 and 443"
+    log "Connectivity check done (tiếp tục cài đặt)"
 }
 
 # Check whether ports 80 and 443 on the public IP are already listening

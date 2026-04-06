@@ -8,6 +8,11 @@ REPO_URL="https://github.com/sp26-ojt/kypo-sp26.git"
 REPO_DIR="kypo-sp26"
 DEBUG_FILE="debug.txt"
 
+# Detect public IP của server này
+detect_public_ip() {
+    curl -s --max-time 5 ifconfig.me 2>/dev/null
+}
+
 # --- MENU CHÍNH ---
 show_menu() {
     clear
@@ -42,7 +47,7 @@ run_build() {
     cd "$REPO_DIR" || { echo "Không thể vào thư mục $REPO_DIR"; exit 1; }
     chmod +x scripts/*.sh 2>/dev/null
 
-    # --- [2/5] Cài đặt dependencies ---
+    # --- [2/4] Cài đặt dependencies ---
     echo "--- [2/4] Installing system dependencies ---"
     sudo apt update
     sudo apt install -y qemu-kvm libvirt-daemon libvirt-clients bridge-utils \
@@ -53,12 +58,11 @@ run_build() {
         curl https://getcroc.schollz.com | bash
     fi
 
-    # --- [3/5] Chuẩn bị Images ---
+    # --- [3/4] Chuẩn bị Images ---
     echo "--- [3/4] Image Preparation ---"
     HTTP_DIR="http"
     mkdir -p "$HTTP_DIR"
 
-    # Tên file chuẩn theo images.tf trong repo
     IMAGES=(
         "noble-server-cloudimg-amd64.img|https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
         "debian-12-genericcloud-amd64.qcow2|https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2"
@@ -125,9 +129,17 @@ run_build() {
     echo "-------------------------------------------------------"
     echo "KYPO_PUBLIC_HOST: IP công khai của server này."
     echo "Dùng để cấu hình Keycloak issuer và các service URL."
-    local default_build_ip="42.115.38.85"
-    read -p "Nhập KYPO_PUBLIC_HOST [$default_build_ip]: " input_build_ip
-    local KYPO_PUBLIC_HOST="${input_build_ip:-$default_build_ip}"
+    echo "Đang detect public IP..."
+    local detected_ip
+    detected_ip=$(detect_public_ip)
+    local KYPO_PUBLIC_HOST
+    if [ -n "$detected_ip" ]; then
+        echo "Detected: $detected_ip"
+        read -p "Nhập KYPO_PUBLIC_HOST [$detected_ip]: " input_build_ip
+        KYPO_PUBLIC_HOST="${input_build_ip:-$detected_ip}"
+    else
+        read -p "Nhập KYPO_PUBLIC_HOST: " KYPO_PUBLIC_HOST
+    fi
 
     if ! echo "$KYPO_PUBLIC_HOST" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
         echo "Lỗi: '$KYPO_PUBLIC_HOST' không phải địa chỉ IP hợp lệ."
@@ -137,7 +149,6 @@ run_build() {
     fi
 
     # --- Xác nhận cấu hình trước khi build ---
-    echo "--- Xác nhận cấu hình ---"
     echo ""
     echo "======================================================="
     echo "XÁC NHẬN CẤU HÌNH"
@@ -149,34 +160,82 @@ run_build() {
         echo "    - $(echo "$item" | cut -d'|' -f1)"
     done
     echo "-------------------------------------------------------"
-    echo "Lưu ý: head_host sẽ được lấy tự động từ OpenStack"
-    echo "       sau khi Terraform deploy xong (cluster_ip output)."
-    echo "-------------------------------------------------------"
     read -p "Nhấn Enter để bắt đầu BUILD..."
 
-    # --- [4/4] Vagrant Up ---
-    echo "--- [4/4] KYPO BUILD (vagrant up via Docker) ---"
+    # --- [4/4] Vagrant Up + Auto Post-Setup ---
+    echo "--- [4/4] KYPO BUILD ---"
     screen -S kypo_build -X quit 2>/dev/null
 
-    VAGRANT_CMD="docker run -it --rm \
-  -e LIBVIRT_DEFAULT_URI \
-  -e KYPO_PUBLIC_HOST=${KYPO_PUBLIC_HOST} \
-  -v /var/run/libvirt/:/var/run/libvirt/ \
-  -v ~/.vagrant.d:/.vagrant.d \
-  -v \$(realpath \"\${PWD}\"):\${PWD} \
-  -w \"\${PWD}\" \
-  --network host \
-  vagrantlibvirt/vagrant-libvirt:latest \
-  vagrant up"
+    local REPO_ABS
+    REPO_ABS="$(realpath "${PWD}")"
+    local PUBLIC_HOST="$KYPO_PUBLIC_HOST"
+    local SCRIPT_PATH="$REPO_ABS/scripts/05-public-proxy-setup.sh"
+    local LOG="$REPO_ABS/../$DEBUG_FILE"
 
-    screen -dmS kypo_build bash -c "$VAGRANT_CMD 2>&1 | tee ../$DEBUG_FILE"
+    # Pipeline chạy nền trong screen, log ghi ra file
+    screen -dmS kypo_build bash -c '
+set -e
+REPO_ABS="'"$REPO_ABS"'"
+PUBLIC_HOST="'"$PUBLIC_HOST"'"
+SCRIPT_PATH="'"$SCRIPT_PATH"'"
+log() { echo "[$(date "+%Y-%m-%d %H:%M:%S")] $1" | tee -a "$LOG"; }
 
-    echo "-------------------------------------------------------"
-    echo "BUILD ĐÃ KHỞI ĐỘNG!"
-    echo "  Theo dõi log: tail -f $PWD/../$DEBUG_FILE"
-    echo "  Live terminal: screen -r kypo_build"
-    echo "-------------------------------------------------------"
+log "=== [1/3] vagrant up ==="
+docker run --rm \
+    -e LIBVIRT_DEFAULT_URI \
+    -e KYPO_PUBLIC_HOST="$PUBLIC_HOST" \
+    -v /var/run/libvirt/:/var/run/libvirt/ \
+    -v ~/.vagrant.d:/.vagrant.d \
+    -v "$REPO_ABS":"$REPO_ABS" \
+    -w "$REPO_ABS" \
+    --network host \
+    vagrantlibvirt/vagrant-libvirt:latest \
+    vagrant up 2>&1 | tee -a "$LOG"
+
+log "=== [2/3] Lấy cluster_ip từ Terraform output ==="
+CLUSTER_IP=$(docker run --rm \
+    -e LIBVIRT_DEFAULT_URI \
+    -v /var/run/libvirt/:/var/run/libvirt/ \
+    -v ~/.vagrant.d:/.vagrant.d \
+    -v "$REPO_ABS":"$REPO_ABS" \
+    -w "$REPO_ABS" \
+    --network host \
+    vagrantlibvirt/vagrant-libvirt:latest \
+    vagrant ssh -- "sudo -i sh -c '"'"'cd /root/devops-tf-deployment/tf-openstack-base && tofu output -raw cluster_ip 2>/dev/null'"'"'" 2>/dev/null | tr -d "\r\n")
+
+if ! echo "$CLUSTER_IP" | grep -qE "^([0-9]{1,3}\.){3}[0-9]{1,3}$"; then
+    log "WARNING: Không lấy được cluster_ip, dùng fallback 10.1.2.157"
+    CLUSTER_IP="10.1.2.157"
+fi
+log "cluster_ip: $CLUSTER_IP"
+
+log "=== [2/3] Cài Nginx proxy ==="
+KYPO_PUBLIC_IP="$PUBLIC_HOST" KYPO_NODE_IP="$CLUSTER_IP" sudo -E bash "$SCRIPT_PATH" 2>&1 | tee -a "$LOG"
+
+log "=== [3/3] Rerun head services (monitoring) ==="
+docker run --rm \
+    -e LIBVIRT_DEFAULT_URI \
+    -e KYPO_PUBLIC_HOST="$PUBLIC_HOST" \
+    -e KYPO_RERUN_HEAD_ONLY=true \
+    -v /var/run/libvirt/:/var/run/libvirt/ \
+    -v ~/.vagrant.d:/.vagrant.d \
+    -v "$REPO_ABS":"$REPO_ABS" \
+    -w "$REPO_ABS" \
+    --network host \
+    vagrantlibvirt/vagrant-libvirt:latest \
+    vagrant provision --provision-with infrastructure-deploy 2>&1 | tee -a "$LOG"
+
+log "=== HOÀN TẤT! KYPO sẵn sàng tại https://$PUBLIC_HOST/ ==="
+'
+
     cd ..
+    echo "-------------------------------------------------------"
+    echo "BUILD đang chạy nền. Theo dõi log bên dưới."
+    echo "Nhấn Ctrl+C để thoát log (build vẫn tiếp tục chạy)."
+    echo "-------------------------------------------------------"
+    sleep 1
+    tail -f "$DEBUG_FILE" || true
+    echo ""
     read -p "Nhấn Enter để về Menu..."
 }
 
@@ -239,9 +298,27 @@ done'"
     read -p "Nhấn Enter để quay lại Menu..."
 }
 
-# --- LỰA CHỌN 3: RESTART MỀM ---
+# --- HELPER: Chạy lệnh trong VM và capture output ---
+_query_vm() {
+    local cmd="$1"
+    if [ ! -d "$REPO_DIR" ]; then return 1; fi
+    cd "$REPO_DIR" || return 1
+    local output
+    output=$(docker run --rm \
+        -e LIBVIRT_DEFAULT_URI \
+        -v /var/run/libvirt/:/var/run/libvirt/ \
+        -v ~/.vagrant.d:/.vagrant.d \
+        -v "$(realpath "${PWD}")":"${PWD}" \
+        -w "${PWD}" \
+        --network host \
+        vagrantlibvirt/vagrant-libvirt:latest \
+        vagrant ssh -- "$cmd" 2>/dev/null)
+    cd ..
+    echo "$output" | tr -d '\r'
+}
+
+# --- HELPER: Chạy lệnh trong VM (interactive, không capture) ---
 _run_in_vm() {
-    # Chạy lệnh bên trong VM qua vagrant ssh
     local cmd="$1"
     if [ ! -d "$REPO_DIR" ]; then
         echo "Lỗi: Không tìm thấy thư mục $REPO_DIR."
@@ -260,6 +337,7 @@ _run_in_vm() {
     cd ..
 }
 
+# --- LỰA CHỌN 3: RESTART MỀM ---
 soft_restart() {
     while true; do
         clear
@@ -384,18 +462,43 @@ setup_public_proxy() {
     echo "======================================================="
     echo "   CÀI NGINX REVERSE PROXY TRÊN PUBLIC HOST"
     echo "======================================================="
-    echo "Script này sẽ cài Nginx và cấu hình forward traffic"
-    echo "từ Public Host về KYPO_Node (10.1.2.157)."
-    echo "-------------------------------------------------------"
 
-    # Nhập public IP
-    local default_ip="42.115.38.85"
-    read -p "Nhập Public IP của server này [$default_ip]: " input_ip
-    local public_ip="${input_ip:-$default_ip}"
+    # Detect public IP
+    echo "Đang detect public IP..."
+    local detected_ip
+    detected_ip=$(detect_public_ip)
+    local public_ip
+    if [ -n "$detected_ip" ]; then
+        echo "Detected: $detected_ip"
+        read -p "Nhập Public IP [$detected_ip]: " input_ip
+        public_ip="${input_ip:-$detected_ip}"
+    else
+        read -p "Nhập Public IP: " public_ip
+    fi
 
-    # Validate định dạng IP cơ bản
     if ! echo "$public_ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
         echo "Lỗi: '$public_ip' không phải địa chỉ IP hợp lệ."
+        read -p "Nhấn Enter để quay lại..."
+        return
+    fi
+
+    # Tự động lấy cluster_ip từ tofu output bên trong VM
+    local node_ip=""
+    if [ -d "$REPO_DIR" ]; then
+        echo "Đang lấy cluster_ip từ Terraform output..."
+        node_ip=$(_query_vm "sudo -i sh -c 'cd /root/devops-tf-deployment/tf-openstack-base && tofu output -raw cluster_ip 2>/dev/null'")
+    fi
+
+    # Fallback: nhập tay nếu không lấy được
+    if ! echo "$node_ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+        echo "Không lấy được cluster_ip tự động (VM chưa up hoặc chưa deploy)."
+        read -p "Nhập KYPO_NODE_IP thủ công: " node_ip
+    else
+        echo "cluster_ip lấy được: $node_ip"
+    fi
+
+    if ! echo "$node_ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+        echo "Lỗi: '$node_ip' không phải địa chỉ IP hợp lệ."
         read -p "Nhấn Enter để quay lại..."
         return
     fi
@@ -404,7 +507,7 @@ setup_public_proxy() {
     echo "-------------------------------------------------------"
     echo "Cấu hình sẽ dùng:"
     echo "  KYPO_PUBLIC_IP : $public_ip"
-    echo "  KYPO_NODE_IP   : 10.1.2.157"
+    echo "  KYPO_NODE_IP   : $node_ip"
     echo "-------------------------------------------------------"
     read -p "Xác nhận cài đặt? (y/N): " confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -413,7 +516,6 @@ setup_public_proxy() {
         return
     fi
 
-    # Xác định đường dẫn script
     local script_path
     if [ -f "$REPO_DIR/scripts/05-public-proxy-setup.sh" ]; then
         script_path="$REPO_DIR/scripts/05-public-proxy-setup.sh"
@@ -427,7 +529,7 @@ setup_public_proxy() {
 
     echo ""
     echo "--- Đang chạy proxy setup ---"
-    KYPO_PUBLIC_IP="$public_ip" sudo -E bash "$script_path"
+    KYPO_PUBLIC_IP="$public_ip" KYPO_NODE_IP="$node_ip" sudo -E bash "$script_path"
 
     echo ""
     read -p "Nhấn Enter để về Menu..."

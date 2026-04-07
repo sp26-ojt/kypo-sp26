@@ -228,6 +228,17 @@ docker run --rm \
     vagrantlibvirt/vagrant-libvirt:latest \
     vagrant ssh -- sudo -i bash -c "$(printf '%q' "$PATCH_CMD")" 2>&1 | tee -a "$LOG" || log "WARNING: patch adaptive-training thất bại, tiếp tục..."
 
+PATCH_TRAINING_CMD="kubectl get configmap training-service-configmap -n crczp -o json | PUBLIC_HOST=$PUBLIC_HOST python3 /vagrant/scripts/patch-training.py | kubectl apply -f - && kubectl rollout restart deployment/training-service -n crczp"
+docker run --rm \
+    -e LIBVIRT_DEFAULT_URI \
+    -v /var/run/libvirt/:/var/run/libvirt/ \
+    -v ~/.vagrant.d:/.vagrant.d \
+    -v "$REPO_ABS":"$REPO_ABS" \
+    -w "$REPO_ABS" \
+    --network host \
+    vagrantlibvirt/vagrant-libvirt:latest \
+    vagrant ssh -- sudo -i bash -c "$(printf '%q' "$PATCH_TRAINING_CMD")" 2>&1 | tee -a "$LOG" || log "WARNING: patch training thất bại, tiếp tục..."
+
 log "=== [4b/5] Patch training configmap ==="
 PATCH_CMD_TRAINING="kubectl get configmap training-service-configmap -n crczp -o json | PUBLIC_HOST=$PUBLIC_HOST python3 /vagrant/scripts/patch-training.py | kubectl apply -f - && kubectl rollout restart deployment/training-service -n crczp"
 docker run --rm \

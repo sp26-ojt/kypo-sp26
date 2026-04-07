@@ -231,6 +231,15 @@ docker run --rm \
 log "=== [5/5] Rerun head services (monitoring) ==="
 docker run --rm \
     -e LIBVIRT_DEFAULT_URI \
+    -v /var/run/libvirt/:/var/run/libvirt/ \
+    -v ~/.vagrant.d:/.vagrant.d \
+    -v "$REPO_ABS":"$REPO_ABS" \
+    -w "$REPO_ABS" \
+    --network host \
+    vagrantlibvirt/vagrant-libvirt:latest \
+    vagrant ssh -- "sudo -i cp -r /vagrant/scripts /tmp/" 2>&1 | tee -a "$LOG"
+docker run --rm \
+    -e LIBVIRT_DEFAULT_URI \
     -e KYPO_PUBLIC_HOST="$PUBLIC_HOST" \
     -e KYPO_RERUN_HEAD_ONLY=true \
     -v /var/run/libvirt/:/var/run/libvirt/ \

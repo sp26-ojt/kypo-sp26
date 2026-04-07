@@ -21,7 +21,6 @@ for key in data:
             f"server.base-url=https://{public_host}/adaptive-training/api/v1",
             f"frontend.url=https://{public_host}",
             "spring.flyway.repair-on-migrate=true",
-            "spring.main.allow-bean-definition-overriding=true",
         ]
         for j, line in enumerate(extra):
             lines.insert(insert_at + j, line)

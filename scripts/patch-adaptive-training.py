@@ -1,4 +1,4 @@
-k#!/usr/bin/env python3
+#!/usr/bin/env python3
 import json, sys, os
 
 public_host = os.environ.get("PUBLIC_HOST", "")

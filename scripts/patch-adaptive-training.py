@@ -14,8 +14,8 @@ for key in data:
             "spring.flyway.repair-on-migrate",
             "spring.main.allow-bean-definition-overriding",
             "spring.autoconfigure.exclude",
-        ]        lines = [l for l in lines if not any(l.startswith(k + "=") for k in keys_to_remove)]
-
+        ]
+        lines = [l for l in lines if not any(l.startswith(k + "=") for k in keys_to_remove)]
         insert_at = next(i + 1 for i, l in enumerate(lines) if "elasticsearch.port=9200" in l)
         extra = [
             f"server.base-url=https://{public_host}/adaptive-training/api/v1",
@@ -25,9 +25,7 @@ for key in data:
         ]
         for j, line in enumerate(extra):
             lines.insert(insert_at + j, line)
-
         data[key] = "\n".join(lines)
 
 cm["data"] = data
 print(json.dumps(cm))
-

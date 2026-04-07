@@ -14,8 +14,7 @@ for key in data:
             "spring.flyway.repair-on-migrate",
             "spring.main.allow-bean-definition-overriding",
             "spring.autoconfigure.exclude",
-        ]
-        lines = [l for l in lines if not any(l.startswith(k + "=") for k in keys_to_remove)]
+        ]        lines = [l for l in lines if not any(l.startswith(k + "=") for k in keys_to_remove)]
 
         insert_at = next(i + 1 for i, l in enumerate(lines) if "elasticsearch.port=9200" in l)
         extra = [
@@ -23,7 +22,6 @@ for key in data:
             f"frontend.url=https://{public_host}",
             "spring.flyway.repair-on-migrate=true",
             "spring.main.allow-bean-definition-overriding=true",
-            "spring.autoconfigure.exclude=cz.cyberrange.platform.commons.security.config.ResourceServerSecurityConfig",
         ]
         for j, line in enumerate(extra):
             lines.insert(insert_at + j, line)

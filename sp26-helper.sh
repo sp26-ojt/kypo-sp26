@@ -172,6 +172,9 @@ run_build() {
     local SCRIPT_PATH="$REPO_ABS/scripts/05-public-proxy-setup.sh"
     local LOG="$REPO_ABS/../$DEBUG_FILE"
 
+    # Xóa log cũ trước khi start
+    > "$LOG"
+
     # Pipeline chạy nền trong screen, log ghi ra file
     screen -dmS kypo_build bash -c '
 set -e
@@ -181,8 +184,8 @@ SCRIPT_PATH="'"$SCRIPT_PATH"'"
 LOG="'"$LOG"'"
 log() { echo "[$(date "+%Y-%m-%d %H:%M:%S")] $1" | tee -a "$LOG"; }
 
-log "=== [1/4] vagrant up ==="
-docker run --rm \
+log "=== [1/5] vagrant up ==="
+docker run --rm -t \
     -e LIBVIRT_DEFAULT_URI \
     -e KYPO_PUBLIC_HOST="$PUBLIC_HOST" \
     -v /var/run/libvirt/:/var/run/libvirt/ \
@@ -193,7 +196,7 @@ docker run --rm \
     vagrantlibvirt/vagrant-libvirt:latest \
     vagrant up 2>&1 | tee -a "$LOG"
 
-log "=== [2/4] Lấy cluster_ip từ Terraform output ==="
+log "=== [2/5] Lấy cluster_ip từ Terraform output ==="
 CLUSTER_IP=$(docker run --rm \
     -e LIBVIRT_DEFAULT_URI \
     -v /var/run/libvirt/:/var/run/libvirt/ \
@@ -210,22 +213,22 @@ if ! echo "$CLUSTER_IP" | grep -qE "^([0-9]{1,3}\.){3}[0-9]{1,3}$"; then
 fi
 log "cluster_ip: $CLUSTER_IP"
 
-log "=== [3/4] Cài Nginx proxy ==="
+log "=== [3/5] Cài Nginx proxy ==="
 KYPO_PUBLIC_IP="$PUBLIC_HOST" KYPO_NODE_IP="$CLUSTER_IP" sudo -E bash "$SCRIPT_PATH" 2>&1 | tee -a "$LOG"
 
-log "=== [3/4] Patch adaptive-training configmap ==="
+log "=== [4/5] Patch adaptive-training configmap ==="
+PATCH_CMD="kubectl get configmap adaptive-training-service-configmap -n crczp -o json | PUBLIC_HOST=$PUBLIC_HOST python3 /vagrant/scripts/patch-adaptive-training.py | kubectl apply -f - && kubectl rollout restart deployment/adaptive-training-service -n crczp"
 docker run --rm \
     -e LIBVIRT_DEFAULT_URI \
-    -e KYPO_PATCH_HOST="$PUBLIC_HOST" \
     -v /var/run/libvirt/:/var/run/libvirt/ \
     -v ~/.vagrant.d:/.vagrant.d \
     -v "$REPO_ABS":"$REPO_ABS" \
     -w "$REPO_ABS" \
     --network host \
     vagrantlibvirt/vagrant-libvirt:latest \
-    vagrant ssh -- 'sudo -i bash -c "kubectl get configmap adaptive-training-service-configmap -n crczp -o json | PUBLIC_HOST=$KYPO_PATCH_HOST python3 /vagrant/scripts/patch-adaptive-training.py | kubectl apply -f - && kubectl rollout restart deployment/adaptive-training-service -n crczp"' 2>&1 | tee -a "$LOG" || log "WARNING: patch adaptive-training thất bại, tiếp tục..."
+    vagrant ssh -- sudo -i bash -c "$(printf '%q' "$PATCH_CMD")" 2>&1 | tee -a "$LOG" || log "WARNING: patch adaptive-training thất bại, tiếp tục..."
 
-log "=== [4/4] Rerun head services (monitoring) ==="
+log "=== [5/5] Rerun head services (monitoring) ==="
 docker run --rm \
     -e LIBVIRT_DEFAULT_URI \
     -e KYPO_PUBLIC_HOST="$PUBLIC_HOST" \
@@ -242,8 +245,6 @@ log "=== HOÀN TẤT! KYPO sẵn sàng tại https://$PUBLIC_HOST/ ==="
 '
 
     cd ..
-    # Xóa log cũ, bắt đầu fresh
-    > "$DEBUG_FILE"
     echo "-------------------------------------------------------"
     echo "BUILD đang chạy nền. Theo dõi log bên dưới."
     echo "Nhấn Ctrl+C để thoát log (build vẫn tiếp tục chạy)."

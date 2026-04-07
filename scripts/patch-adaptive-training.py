@@ -22,6 +22,7 @@ for key in data:
             f"frontend.url=https://{public_host}",
             "spring.flyway.repair-on-migrate=true",
             "spring.main.allow-bean-definition-overriding=true",
+            "spring.autoconfigure.exclude=cz.cyberrange.platform.commons.security.config.ResourceServerSecurityConfig",
         ]
         for j, line in enumerate(extra):
             lines.insert(insert_at + j, line)

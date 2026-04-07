@@ -13,6 +13,7 @@ for key in data:
             "frontend.url",
             "spring.flyway.repair-on-migrate",
             "spring.main.allow-bean-definition-overriding",
+            "spring.autoconfigure.exclude",
         ]
         lines = [l for l in lines if not any(l.startswith(k + "=") for k in keys_to_remove)]
 

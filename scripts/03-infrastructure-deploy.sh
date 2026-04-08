@@ -25,7 +25,7 @@ CUSTOM_FRONTEND_IMAGE="sp26ojt/frontend-platform"
 CUSTOM_FRONTEND_TAG="v25"
 
 CUSTOM_TRAINING_IMAGE="nnm311/kypo-training-service"
-CUSTOM_TRAINING_TAG="v31"
+CUSTOM_TRAINING_TAG="v32"
 
 CUSTOM_ADAPTIVE_TRAINING_IMAGE="nnm311/kypo-adaptive-training-service"
 CUSTOM_ADAPTIVE_TRAINING_TAG="v15"
@@ -432,25 +432,6 @@ EOF
                 ;;
         esac
     fi
-
-    # === CUSTOM FIX: Drop stale DB roles to prevent hook failures on redeploy ===
-    log "Dropping stale DBs and roles to prevent Helm hook failures..."
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP DATABASE IF EXISTS keycloak;" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP DATABASE IF EXISTS \"crczp-adaptive-training\";" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP DATABASE IF EXISTS \"crczp-adaptive-smart-assistant\";" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP DATABASE IF EXISTS training;" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP DATABASE IF EXISTS guacamole;" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP DATABASE IF EXISTS \"crczp-answers-storage\";" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP DATABASE IF EXISTS \"crczp-training-feedback\";" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP ROLE IF EXISTS keycloak;" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP ROLE IF EXISTS \"crczp-adaptive-training\";" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP ROLE IF EXISTS \"crczp-adaptive-smart-assistant\";" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP ROLE IF EXISTS training;" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP ROLE IF EXISTS guacamole;" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP ROLE IF EXISTS \"crczp-answers-storage\";" 2>/dev/null || true
-    kubectl exec -n cnpg-system postgres-1 -- psql -U postgres -c "DROP ROLE IF EXISTS \"crczp-training-feedback\";" 2>/dev/null || true
-    log "Stale DB cleanup done"
-    # ============================================================================
 
     # Apply head services configuration
     log "Applying head services configuration (this may take 20-40 minutes)..."

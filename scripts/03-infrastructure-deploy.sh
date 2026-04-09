@@ -25,10 +25,10 @@ CUSTOM_FRONTEND_IMAGE="sp26ojt/frontend-platform"
 CUSTOM_FRONTEND_TAG="v25"
 
 CUSTOM_TRAINING_IMAGE="nnm311/kypo-training-service"
-CUSTOM_TRAINING_TAG="v32"
+CUSTOM_TRAINING_TAG="v33"
 
 CUSTOM_ADAPTIVE_TRAINING_IMAGE="nnm311/kypo-adaptive-training-service"
-CUSTOM_ADAPTIVE_TRAINING_TAG="v15"
+CUSTOM_ADAPTIVE_TRAINING_TAG="v16"
 # ======================================
 
 # ─────────────────────────────────────────────

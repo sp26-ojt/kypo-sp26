@@ -208,8 +208,12 @@ CLUSTER_IP=$(docker run --rm \
     vagrant ssh -- "sudo -i sh -c '"'"'cd /root/devops-tf-deployment/tf-openstack-base && tofu output -raw cluster_ip 2>/dev/null'"'"'" 2>/dev/null | tr -d "\r\n")
 
 if ! echo "$CLUSTER_IP" | grep -qE "^([0-9]{1,3}\.){3}[0-9]{1,3}$"; then
-    log "WARNING: Không lấy được cluster_ip, dùng fallback 10.1.2.157"
-    CLUSTER_IP="10.1.2.157"
+    log "WARNING: Không lấy được cluster_ip tự động."
+    read -p "Nhập KYPO_NODE_IP thủ công: " CLUSTER_IP
+    if ! echo "$CLUSTER_IP" | grep -qE "^([0-9]{1,3}\.){3}[0-9]{1,3}$"; then
+        log "ERROR: IP không hợp lệ, hủy build."
+        exit 1
+    fi
 fi
 log "cluster_ip: $CLUSTER_IP"
 
@@ -537,7 +541,7 @@ setup_public_proxy() {
         node_ip=$(_query_vm "sudo -i sh -c 'cd /root/devops-tf-deployment/tf-openstack-base && tofu output -raw cluster_ip 2>/dev/null'")
     fi
 
-    # Fallback: nhập tay nếu không lấy được
+    # Bắt buộc nhập tay nếu không lấy được
     if ! echo "$node_ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
         echo "Không lấy được cluster_ip tự động (VM chưa up hoặc chưa deploy)."
         read -p "Nhập KYPO_NODE_IP thủ công: " node_ip

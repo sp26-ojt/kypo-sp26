@@ -22,13 +22,16 @@ VENV_PATH="/root/kolla-ansible-venv"
 
 # === CUSTOM: Docker images của bạn ===
 CUSTOM_FRONTEND_IMAGE="sp26ojt/frontend-platform"
-CUSTOM_FRONTEND_TAG="v25"
+CUSTOM_FRONTEND_TAG="v41"
 
 CUSTOM_TRAINING_IMAGE="nnm311/kypo-training-service"
 CUSTOM_TRAINING_TAG="v33"
 
 CUSTOM_ADAPTIVE_TRAINING_IMAGE="nnm311/kypo-adaptive-training-service"
 CUSTOM_ADAPTIVE_TRAINING_TAG="v16"
+
+CUSTOM_SANDBOX_IMAGE="sp26ojt/sandbox-service"
+CUSTOM_SANDBOX_TAG="v6"
 # ======================================
 
 # ─────────────────────────────────────────────
@@ -394,11 +397,17 @@ adaptive-training:
   image:
     url: ${CUSTOM_ADAPTIVE_TRAINING_IMAGE}
     tag: ${CUSTOM_ADAPTIVE_TRAINING_TAG}
+
+sandbox-service:
+  image:
+    url: ${CUSTOM_SANDBOX_IMAGE}
+    tag: ${CUSTOM_SANDBOX_TAG}
 EOF
             log "Image overrides applied:"
             log "  - frontend: ${CUSTOM_FRONTEND_IMAGE}:${CUSTOM_FRONTEND_TAG}"
             log "  - training: ${CUSTOM_TRAINING_IMAGE}:${CUSTOM_TRAINING_TAG}"
             log "  - adaptive-training: ${CUSTOM_ADAPTIVE_TRAINING_IMAGE}:${CUSTOM_ADAPTIVE_TRAINING_TAG}"
+            log "  - sandbox-service: ${CUSTOM_SANDBOX_IMAGE}:${CUSTOM_SANDBOX_TAG}"
         else
             log "Custom image overrides already applied in values.yaml"
         fi

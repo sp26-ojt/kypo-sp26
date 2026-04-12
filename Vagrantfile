@@ -5,7 +5,7 @@
 dns1 = ENV["DNS1"] || "1.1.1.1"
 dns2 = ENV["DNS2"] || "1.0.0.1"
 cpu = ENV["CPU"] || 16
-ram = ENV["RAM"] || 88064
+ram = ENV["RAM"] || 253952
 kypo_public_host = ENV["KYPO_PUBLIC_HOST"] || ""
 kypo_rerun_head_only = ENV["KYPO_RERUN_HEAD_ONLY"] || ""
 

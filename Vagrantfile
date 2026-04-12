@@ -4,7 +4,7 @@
 
 dns1 = ENV["DNS1"] || "1.1.1.1"
 dns2 = ENV["DNS2"] || "1.0.0.1"
-cpu = ENV["CPU"] || 8
+cpu = ENV["CPU"] || 16
 ram = ENV["RAM"] || 88064
 kypo_public_host = ENV["KYPO_PUBLIC_HOST"] || ""
 kypo_rerun_head_only = ENV["KYPO_RERUN_HEAD_ONLY"] || ""
@@ -26,7 +26,7 @@ Vagrant.configure(2) do |config|
     libvirt.cpus = cpu
     libvirt.memory = ram
     libvirt.nested = true
-    libvirt.machine_virtual_size = 250
+    libvirt.machine_virtual_size = 400
   end
 
   # File provisioning - copy configuration and scripts

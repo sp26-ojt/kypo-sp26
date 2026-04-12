@@ -202,7 +202,7 @@ deploy_base_infrastructure() {
     log "Applying base infrastructure (this may take 15-30 minutes)..."
 
     # === CUSTOM FIX 2: Ép chạy tuần tự để chống nghẽn I/O ===
-    if ! retry tofu apply -auto-approve -var-file tfvars/vars-all.tfvars -parallelism=1; then
+    if ! retry tofu apply -auto-approve -var-file tfvars/vars-all.tfvars; then
         log_error "Base infrastructure deployment failed"
         return 1
     fi

@@ -135,6 +135,36 @@ verify_services() {
     log_success "Service verification completed"
 }
 
+# Configure OpenStack quotas
+configure_openstack_quotas() {
+    log "Configuring OpenStack quotas..."
+
+    source /etc/kolla/admin-openrc.sh
+    source /root/kolla-ansible-venv/bin/activate
+
+    local total_ram_mb
+    total_ram_mb=$(free -m | awk '/^Mem:/{print $2}')
+
+    local total_vcpu
+    total_vcpu=$(nproc)
+
+    for project in admin demo; do
+        if openstack project show "$project" >/dev/null 2>&1; then
+            openstack quota set \
+                --cores "$total_vcpu" \
+                --ram "$total_ram_mb" \
+                --instances 40 \
+                --floating-ips 50 \
+                --volumes 100 \
+                --gigabytes 2000 \
+                "$project"
+            log_success "Quota updated for project: $project (vCPU=$total_vcpu, RAM=${total_ram_mb}MB)"
+        else
+            log_warning "Project '$project' not found, skipping"
+        fi
+    done
+}
+
 # Final cleanup and optimization
 final_cleanup() {
     log "Performing final cleanup..."
@@ -161,6 +191,7 @@ main() {
     sleep 10
 
     verify_services
+    configure_openstack_quotas
     display_deployment_info
     final_cleanup
 

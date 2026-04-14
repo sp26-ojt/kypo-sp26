@@ -27,6 +27,10 @@ Vagrant.configure(2) do |config|
     libvirt.memory = ram
     libvirt.nested = true
     libvirt.machine_virtual_size = 400
+    libvirt.cpu_mode = "host-passthrough"   # dùng CPU thật, nested virt nhanh hơn
+    libvirt.memorybacking :hugepages         # giảm TLB miss, RAM access nhanh hơn
+    libvirt.disk_bus = "virtio"
+    libvirt.nic_model_type = "virtio"
   end
 
   # File provisioning - copy configuration and scripts

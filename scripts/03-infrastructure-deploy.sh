@@ -22,16 +22,16 @@ VENV_PATH="/root/kolla-ansible-venv"
 
 # === CUSTOM: Docker images của bạn ===
 CUSTOM_FRONTEND_IMAGE="sp26ojt/frontend-platform"
-CUSTOM_FRONTEND_TAG="v41"
+CUSTOM_FRONTEND_TAG="v59"
 
 CUSTOM_TRAINING_IMAGE="nnm311/kypo-training-service"
-CUSTOM_TRAINING_TAG="v33"
+CUSTOM_TRAINING_TAG="v34"
 
 CUSTOM_ADAPTIVE_TRAINING_IMAGE="nnm311/kypo-adaptive-training-service"
-CUSTOM_ADAPTIVE_TRAINING_TAG="v16"
+CUSTOM_ADAPTIVE_TRAINING_TAG="v17"
 
 CUSTOM_SANDBOX_IMAGE="sp26ojt/sandbox-service"
-CUSTOM_SANDBOX_TAG="v6"
+CUSTOM_SANDBOX_TAG="v19"
 # ======================================
 
 # ─────────────────────────────────────────────

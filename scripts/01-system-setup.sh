@@ -125,6 +125,28 @@ EOF
     log_success "SSH configuration completed"
 }
 
+# Kernel tuning for OpenStack workloads
+tune_kernel() {
+    log "Applying kernel tuning for OpenStack..."
+
+    cat >> /etc/sysctl.conf << 'EOF'
+
+# KYPO OpenStack tuning
+net.ipv4.ip_forward = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+vm.swappiness = 10
+vm.dirty_ratio = 15
+vm.dirty_background_ratio = 5
+fs.inotify.max_user_instances = 8192
+fs.inotify.max_user_watches = 524288
+kernel.pid_max = 4194304
+EOF
+
+    sysctl -p >/dev/null 2>&1 || true
+    log_success "Kernel tuning applied"
+}
+
 # Clean up hosts file
 cleanup_hosts() {
     log "Cleaning up hosts file..."
@@ -146,6 +168,7 @@ main() {
     install_snap_packages
     install_apt_packages
     setup_ssh
+    tune_kernel
     cleanup_hosts
 
     log_success "=== System Setup Phase Completed ==="

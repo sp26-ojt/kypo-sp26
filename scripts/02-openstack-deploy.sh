@@ -101,6 +101,8 @@ configure_globals() {
         "enable_heat: \"no\""
         "kolla_internal_vip_address: \"10.1.2.9\""
         "neutron_external_interface: \"eth2\""
+        "openstack_service_workers: \"4\""
+        "nova_compute_virt_type: \"kvm\""
     )
 
     # Loop through each setting

@@ -142,28 +142,69 @@ configure_openstack_quotas() {
     source /etc/kolla/admin-openrc.sh
     source /root/kolla-ansible-venv/bin/activate
 
-    local total_ram_mb
+    local total_ram_mb total_vcpu usable_ram_mb max_instances
     total_ram_mb=$(free -m | awk '/^Mem:/{print $2}')
-
-    local total_vcpu
     total_vcpu=$(nproc)
+    usable_ram_mb=$(( total_ram_mb - 20480 ))
+    max_instances=100
 
+    # Update Placement inventory via API (cpu_allocation_ratio=16, disk_allocation_ratio=3)
+    local admin_pass token rp gen total_disk
+    admin_pass=$(grep keystone_admin_password /etc/kolla/passwords.yml | awk '{print $2}')
+
+    token=$(curl -s -X POST http://10.1.2.9:5000/v3/auth/tokens \
+        -H 'Content-Type: application/json' \
+        -d "{\"auth\":{\"identity\":{\"methods\":[\"password\"],\"password\":{\"user\":{\"name\":\"admin\",\"domain\":{\"name\":\"Default\"},\"password\":\"${admin_pass}\"}}},\"scope\":{\"project\":{\"name\":\"admin\",\"domain\":{\"name\":\"Default\"}}}}}" \
+        -D - 2>/dev/null | grep -i x-subject-token | awk '{print $2}' | tr -d '\r ')
+
+    if [[ -n "$token" ]]; then
+        rp=$(curl -s http://10.1.2.9:8780/resource_providers \
+            -H "X-Auth-Token: $token" \
+            -H 'OpenStack-API-Version: placement 1.36' \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)["resource_providers"][0]["uuid"])' 2>/dev/null)
+
+        gen=$(curl -s "http://10.1.2.9:8780/resource_providers/$rp/inventories" \
+            -H "X-Auth-Token: $token" \
+            -H 'OpenStack-API-Version: placement 1.36' \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin)["resource_provider_generation"])' 2>/dev/null)
+
+        total_disk=$(df -BG / | awk 'NR==2{print int($2)}')
+
+        curl -s -X PUT "http://10.1.2.9:8780/resource_providers/$rp/inventories" \
+            -H "X-Auth-Token: $token" \
+            -H 'OpenStack-API-Version: placement 1.36' \
+            -H 'Content-Type: application/json' \
+            -d "{
+                \"resource_provider_generation\": $gen,
+                \"inventories\": {
+                    \"VCPU\":      {\"total\": $total_vcpu, \"reserved\": 0, \"min_unit\": 1, \"max_unit\": $total_vcpu, \"step_size\": 1, \"allocation_ratio\": 16.0},
+                    \"MEMORY_MB\": {\"total\": $total_ram_mb, \"reserved\": 512, \"min_unit\": 1, \"max_unit\": $total_ram_mb, \"step_size\": 1, \"allocation_ratio\": 1.0},
+                    \"DISK_GB\":   {\"total\": $total_disk, \"reserved\": 0, \"min_unit\": 1, \"max_unit\": $total_disk, \"step_size\": 1, \"allocation_ratio\": 3.0}
+                }
+            }" >/dev/null
+        log_success "Placement inventory updated (VCPU ratio=16, DISK ratio=3)"
+    else
+        log_warning "Could not get Keystone token, skipping Placement update"
+    fi
+
+    # Set Nova quota for each project
     for project in admin demo; do
         if openstack project show "$project" >/dev/null 2>&1; then
             openstack quota set \
-                --cores "$total_vcpu" \
-                --ram "$total_ram_mb" \
-                --instances 40 \
+                --cores $(( total_vcpu * 16 )) \
+                --ram "$usable_ram_mb" \
+                --instances "$max_instances" \
                 --floating-ips 50 \
                 --volumes 100 \
                 --gigabytes 2000 \
                 "$project"
-            log_success "Quota updated for project: $project (vCPU=$total_vcpu, RAM=${total_ram_mb}MB)"
+            log_success "Quota updated for project: $project (vCPU=$(( total_vcpu * 16 )), RAM=${usable_ram_mb}MB, instances=$max_instances)"
         else
             log_warning "Project '$project' not found, skipping"
         fi
     done
 }
+
 
 # Final cleanup and optimization
 final_cleanup() {

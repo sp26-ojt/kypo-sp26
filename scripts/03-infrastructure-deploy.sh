@@ -31,7 +31,7 @@ CUSTOM_ADAPTIVE_TRAINING_IMAGE="nnm311/kypo-adaptive-training-service"
 CUSTOM_ADAPTIVE_TRAINING_TAG="v17"
 
 CUSTOM_SANDBOX_IMAGE="sp26ojt/sandbox-service"
-CUSTOM_SANDBOX_TAG="v19"
+CUSTOM_SANDBOX_TAG="v20"
 # ======================================
 
 # ─────────────────────────────────────────────

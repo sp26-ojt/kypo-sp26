@@ -141,8 +141,8 @@ run_build() {
         read -p "Nhập KYPO_PUBLIC_HOST: " KYPO_PUBLIC_HOST
     fi
 
-    if ! echo "$KYPO_PUBLIC_HOST" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
-        echo "Lỗi: '$KYPO_PUBLIC_HOST' không phải địa chỉ IP hợp lệ."
+    if ! echo "$KYPO_PUBLIC_HOST" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$|^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$'; then
+        echo "Lỗi: '$KYPO_PUBLIC_HOST' không phải địa chỉ IP hoặc domain hợp lệ."
         read -p "Nhấn Enter để quay lại..."
         cd ..
         return

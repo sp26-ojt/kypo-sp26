@@ -310,7 +310,7 @@ setup_head_services_variables() {
     }
 
     # Set environment variables for head services
-    export TF_VAR_acme_contact="demo@example.com"
+    export TF_VAR_acme_contact="ngochung69223@gmail.com"
     export TF_VAR_application_credential_id="$OS_APPLICATION_CREDENTIAL_ID"
     export TF_VAR_application_credential_secret="$OS_APPLICATION_CREDENTIAL_SECRET"
     export TF_VAR_enable_monitoring=true

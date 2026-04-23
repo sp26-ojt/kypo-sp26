@@ -26,7 +26,7 @@ Vagrant.configure(2) do |config|
     libvirt.cpus = cpu
     libvirt.memory = ram
     libvirt.nested = true
-    libvirt.machine_virtual_size = 400
+    libvirt.machine_virtual_size = 128
     libvirt.cpu_mode = "host-passthrough"
     libvirt.disk_bus = "virtio"
     libvirt.nic_model_type = "virtio"
